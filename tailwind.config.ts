@@ -12,9 +12,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        display: ["Orbitron", "sans-serif"],
-        body: ["Space Grotesk", "sans-serif"],
-        ui: ["Rajdhani", "sans-serif"],
+        display: ["Fredoka", "sans-serif"],
+        body: ["Nunito", "sans-serif"],
+        ui: ["Quicksand", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

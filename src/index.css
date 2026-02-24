@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&family=Nunito:wght@300;400;500;600;700;800;900&family=Quicksand:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,60 +6,60 @@
 
 @layer base {
   :root {
-    --background: 230 25% 7%;
-    --foreground: 210 40% 96%;
+    --background: 240 15% 12%;
+    --foreground: 220 20% 93%;
 
-    --card: 230 25% 10%;
-    --card-foreground: 210 40% 96%;
+    --card: 240 12% 16%;
+    --card-foreground: 220 20% 93%;
 
-    --popover: 230 25% 10%;
-    --popover-foreground: 210 40% 96%;
+    --popover: 240 12% 16%;
+    --popover-foreground: 220 20% 93%;
 
-    --primary: 190 100% 50%;
-    --primary-foreground: 230 25% 7%;
+    --primary: 200 80% 55%;
+    --primary-foreground: 240 15% 10%;
 
-    --secondary: 320 100% 60%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 330 65% 58%;
+    --secondary-foreground: 220 20% 96%;
 
-    --muted: 230 20% 18%;
-    --muted-foreground: 215 20% 55%;
+    --muted: 240 10% 22%;
+    --muted-foreground: 220 15% 55%;
 
-    --accent: 270 100% 65%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 260 55% 60%;
+    --accent-foreground: 220 20% 96%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 220 20% 96%;
 
-    --border: 230 20% 20%;
-    --input: 230 20% 15%;
-    --ring: 190 100% 50%;
+    --border: 240 10% 24%;
+    --input: 240 10% 19%;
+    --ring: 200 80% 55%;
 
-    --radius: 0.75rem;
+    --radius: 0.875rem;
 
-    --neon-cyan: 190 100% 50%;
-    --neon-magenta: 320 100% 60%;
-    --neon-purple: 270 100% 65%;
-    --neon-green: 150 100% 50%;
-    --neon-yellow: 50 100% 60%;
-    --neon-orange: 30 100% 55%;
+    --neon-cyan: 200 80% 55%;
+    --neon-magenta: 330 65% 58%;
+    --neon-purple: 260 55% 60%;
+    --neon-green: 155 60% 48%;
+    --neon-yellow: 45 80% 58%;
+    --neon-orange: 25 75% 55%;
 
-    --glass: 230 25% 12%;
-    --glass-border: 230 20% 25%;
+    --glass: 240 12% 18%;
+    --glass-border: 240 10% 28%;
 
-    --success: 150 100% 45%;
-    --success-foreground: 230 25% 7%;
+    --success: 155 55% 45%;
+    --success-foreground: 240 15% 10%;
 
-    --warning: 50 100% 55%;
-    --warning-foreground: 230 25% 7%;
+    --warning: 45 75% 55%;
+    --warning-foreground: 240 15% 10%;
 
-    --sidebar-background: 230 25% 10%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-primary: 190 100% 50%;
-    --sidebar-primary-foreground: 230 25% 7%;
-    --sidebar-accent: 230 20% 18%;
-    --sidebar-accent-foreground: 210 40% 96%;
-    --sidebar-border: 230 20% 20%;
-    --sidebar-ring: 190 100% 50%;
+    --sidebar-background: 240 12% 15%;
+    --sidebar-foreground: 220 20% 93%;
+    --sidebar-primary: 200 80% 55%;
+    --sidebar-primary-foreground: 240 15% 10%;
+    --sidebar-accent: 240 10% 22%;
+    --sidebar-accent-foreground: 220 20% 93%;
+    --sidebar-border: 240 10% 24%;
+    --sidebar-ring: 200 80% 55%;
   }
 }
 
@@ -74,73 +74,73 @@
 
 @layer utilities {
   .font-display {
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Fredoka', sans-serif;
   }
   .font-body {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Nunito', sans-serif;
   }
   .font-ui {
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Quicksand', sans-serif;
   }
 
   .glow-cyan {
-    text-shadow: 0 0 10px hsl(190 100% 50% / 0.8), 0 0 30px hsl(190 100% 50% / 0.4), 0 0 60px hsl(190 100% 50% / 0.2);
+    text-shadow: 0 0 8px hsl(200 80% 55% / 0.5), 0 0 20px hsl(200 80% 55% / 0.2);
   }
   .glow-magenta {
-    text-shadow: 0 0 10px hsl(320 100% 60% / 0.8), 0 0 30px hsl(320 100% 60% / 0.4), 0 0 60px hsl(320 100% 60% / 0.2);
+    text-shadow: 0 0 8px hsl(330 65% 58% / 0.5), 0 0 20px hsl(330 65% 58% / 0.2);
   }
 
   .glass-card {
-    @apply bg-card/60 backdrop-blur-xl border border-glass-border rounded-xl;
-    box-shadow: 0 0 20px hsl(190 100% 50% / 0.05), inset 0 1px 0 hsl(210 40% 96% / 0.05);
+    @apply bg-card/70 backdrop-blur-lg border border-glass-border rounded-2xl;
+    box-shadow: 0 4px 20px hsl(200 80% 55% / 0.04), inset 0 1px 0 hsl(220 20% 93% / 0.04);
   }
 
   .glass-card-magenta {
-    @apply bg-card/60 backdrop-blur-xl border border-secondary/20 rounded-xl;
-    box-shadow: 0 0 20px hsl(320 100% 60% / 0.1), inset 0 1px 0 hsl(210 40% 96% / 0.05);
+    @apply bg-card/70 backdrop-blur-lg border border-secondary/20 rounded-2xl;
+    box-shadow: 0 4px 20px hsl(330 65% 58% / 0.06), inset 0 1px 0 hsl(220 20% 93% / 0.04);
   }
 
   .neon-border-cyan {
-    box-shadow: 0 0 5px hsl(190 100% 50% / 0.5), 0 0 15px hsl(190 100% 50% / 0.2), inset 0 0 5px hsl(190 100% 50% / 0.1);
-    border-color: hsl(190 100% 50% / 0.5);
+    box-shadow: 0 0 4px hsl(200 80% 55% / 0.35), 0 0 12px hsl(200 80% 55% / 0.12);
+    border-color: hsl(200 80% 55% / 0.45);
   }
 
   .neon-border-magenta {
-    box-shadow: 0 0 5px hsl(320 100% 60% / 0.5), 0 0 15px hsl(320 100% 60% / 0.2), inset 0 0 5px hsl(320 100% 60% / 0.1);
-    border-color: hsl(320 100% 60% / 0.5);
+    box-shadow: 0 0 4px hsl(330 65% 58% / 0.35), 0 0 12px hsl(330 65% 58% / 0.12);
+    border-color: hsl(330 65% 58% / 0.45);
   }
 
   .btn-neon {
-    @apply relative overflow-hidden font-display font-bold tracking-wider uppercase;
-    background: linear-gradient(135deg, hsl(190 100% 50%), hsl(270 100% 65%));
-    box-shadow: 0 0 15px hsl(190 100% 50% / 0.4), 0 0 30px hsl(270 100% 65% / 0.2);
+    @apply relative overflow-hidden font-display font-semibold tracking-wide;
+    background: linear-gradient(135deg, hsl(200 80% 55%), hsl(260 55% 60%));
+    box-shadow: 0 4px 15px hsl(200 80% 55% / 0.25);
     transition: all 0.3s ease;
   }
   .btn-neon:hover {
-    box-shadow: 0 0 25px hsl(190 100% 50% / 0.6), 0 0 50px hsl(270 100% 65% / 0.4);
+    box-shadow: 0 6px 25px hsl(200 80% 55% / 0.35);
     transform: translateY(-2px);
   }
 
   .btn-neon-magenta {
-    @apply relative overflow-hidden font-display font-bold tracking-wider uppercase;
-    background: linear-gradient(135deg, hsl(320 100% 60%), hsl(270 100% 65%));
-    box-shadow: 0 0 15px hsl(320 100% 60% / 0.4), 0 0 30px hsl(270 100% 65% / 0.2);
+    @apply relative overflow-hidden font-display font-semibold tracking-wide;
+    background: linear-gradient(135deg, hsl(330 65% 58%), hsl(260 55% 60%));
+    box-shadow: 0 4px 15px hsl(330 65% 58% / 0.25);
     transition: all 0.3s ease;
   }
   .btn-neon-magenta:hover {
-    box-shadow: 0 0 25px hsl(320 100% 60% / 0.6), 0 0 50px hsl(270 100% 65% / 0.4);
+    box-shadow: 0 6px 25px hsl(330 65% 58% / 0.35);
     transform: translateY(-2px);
   }
 
   .gradient-text {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, hsl(190 100% 50%), hsl(320 100% 60%), hsl(270 100% 65%));
+    background-image: linear-gradient(135deg, hsl(200 80% 55%), hsl(330 65% 58%), hsl(260 55% 60%));
   }
 
   .gradient-bg-animated {
-    background: linear-gradient(-45deg, hsl(230 25% 7%), hsl(270 40% 12%), hsl(230 25% 7%), hsl(320 30% 10%));
+    background: linear-gradient(-45deg, hsl(240 15% 12%), hsl(260 20% 16%), hsl(240 15% 12%), hsl(330 15% 14%));
     background-size: 400% 400%;
-    animation: gradientShift 8s ease infinite;
+    animation: gradientShift 10s ease infinite;
   }
 }
 
