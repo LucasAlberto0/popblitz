@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import AvatarSelect from "@/components/game/AvatarSelect";
-import { useState } from "react";
+import { Loader2 } from "lucide-react";
 
 function SetupContent() {
   const router = useRouter();
@@ -16,17 +16,80 @@ function SetupContent() {
   const [avatar, setAvatar] = useState("🎮");
   const [roomCode, setRoomCode] = useState("");
   const [nameGlow, setNameGlow] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) return;
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("player", JSON.stringify({ name, avatar }));
-    }
-    if (mode === "create") {
-      const code = Math.random().toString(36).substring(2, 6).toUpperCase();
-      router.push(`/lobby/${code}?host=true`);
-    } else {
-      router.push(`/lobby/${roomCode || "DEMO"}`);
+    
+    setIsLoading(true);
+    setError("");
+
+    try {
+      if (mode === "create") {
+        const res = await fetch("/api/rooms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hostName: name.trim(),
+            hostAvatar: avatar,
+          }),
+        });
+        
+        const data = await res.json();
+        
+        if (data.error) {
+          setError(data.error);
+          setIsLoading(false);
+          return;
+        }
+
+        sessionStorage.setItem("player", JSON.stringify({
+          id: data.player.id,
+          sessionId: data.player.sessionId,
+          name: data.player.name,
+          avatar: data.player.avatar,
+          isHost: true,
+        }));
+
+        router.push(`/lobby/${data.room.code}?host=true`);
+      } else {
+        if (!roomCode.trim()) {
+          setError("Digite o código da sala");
+          setIsLoading(false);
+          return;
+        }
+
+        const res = await fetch(`/api/rooms/${roomCode}/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playerName: name.trim(),
+            playerAvatar: avatar,
+          }),
+        });
+        
+        const data = await res.json();
+        
+        if (data.error) {
+          setError(data.error);
+          setIsLoading(false);
+          return;
+        }
+
+        sessionStorage.setItem("player", JSON.stringify({
+          id: data.player.id,
+          sessionId: data.player.sessionId,
+          name: data.player.name,
+          avatar: data.player.avatar,
+          isHost: false,
+        }));
+
+        router.push(`/lobby/${roomCode.toUpperCase()}`);
+      }
+    } catch (err) {
+      setError("Erro ao conectar. Tente novamente.");
+      setIsLoading(false);
     }
   };
 
@@ -44,7 +107,12 @@ function SetupContent() {
           {mode === "create" ? "Criar Sala" : "Entrar na Sala"}
         </h2>
 
-        {/* Name */}
+        {error && (
+          <div className="bg-red-500/20 border border-red-500 text-red-500 px-4 py-2 rounded-lg text-sm text-center">
+            {error}
+          </div>
+        )}
+
         <div>
           <label className="font-ui text-sm text-muted-foreground uppercase tracking-wider block mb-2">
             Seu nome
@@ -60,11 +128,11 @@ function SetupContent() {
               placeholder="Digite seu nome..."
               className="w-full bg-input border border-border rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:neon-border-cyan transition-all font-body"
               maxLength={20}
+              disabled={isLoading}
             />
           </motion.div>
         </div>
 
-        {/* Avatar */}
         <div>
           <label className="font-ui text-sm text-muted-foreground uppercase tracking-wider block mb-2">
             Escolha seu avatar
@@ -72,7 +140,6 @@ function SetupContent() {
           <AvatarSelect selected={avatar} onSelect={setAvatar} />
         </div>
 
-        {/* Preview */}
         <div className="flex items-center justify-center gap-3 py-4">
           <motion.div
             animate={{ rotateY: [0, 10, -10, 0] }}
@@ -87,7 +154,6 @@ function SetupContent() {
           </div>
         </div>
 
-        {/* Room code for join mode */}
         {mode === "join" && (
           <div>
             <label className="font-ui text-sm text-muted-foreground uppercase tracking-wider block mb-2">
@@ -99,19 +165,20 @@ function SetupContent() {
               placeholder="EX: AB1C"
               className="w-full bg-input border border-border rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:neon-border-cyan transition-all font-display text-center text-xl tracking-[0.3em]"
               maxLength={6}
+              disabled={isLoading}
             />
           </div>
         )}
 
-        {/* Submit */}
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleSubmit}
-          disabled={!name.trim()}
-          className="btn-neon w-full py-4 rounded-xl text-primary-foreground font-display text-sm tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={!name.trim() || isLoading}
+          className="btn-neon w-full py-4 rounded-xl text-primary-foreground font-display text-sm tracking-widest disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {mode === "create" ? "🚀 Criar Sala" : "⚡ Entrar"}
+          {isLoading ? <Loader2 className="animate-spin" /> : null}
+          {isLoading ? "Conectando..." : mode === "create" ? "🚀 Criar Sala" : "⚡ Entrar"}
         </motion.button>
 
         <button
@@ -128,6 +195,7 @@ function SetupContent() {
 function SetupLoading() {
   return (
     <div className="relative min-h-screen flex items-center justify-center gradient-bg-animated">
+      <ParticleBackground />
       <div className="text-primary font-display text-xl">Carregando...</div>
     </div>
   );

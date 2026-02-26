@@ -1,53 +1,67 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import ConfettiEffect from "@/components/game/ConfettiEffect";
-import type { PlayerData } from "@/components/game/RankingList";
-import { Trophy, Medal, Award, RotateCcw, Home } from "lucide-react";
+import { Trophy, Medal, Award, RotateCcw, Home, Loader2 } from "lucide-react";
 
-const fallbackPlayers: PlayerData[] = [
-  { id: "1", name: "Você", avatar: "🎮", score: 420 },
-  { id: "2", name: "Luna", avatar: "🌟", score: 380 },
-  { id: "3", name: "Blaze", avatar: "🔥", score: 310 },
-  { id: "4", name: "Nyx", avatar: "🎭", score: 250 },
-  { id: "5", name: "Spark", avatar: "⚡", score: 180 },
-];
-
-const podiumIcons = [
-  <Trophy className="text-neon-yellow" size={32} key="trophy" />,
-  <Medal className="text-muted-foreground" size={28} key="medal" />,
-  <Award className="text-neon-orange" size={24} key="award" />,
-];
-
-const podiumOrder = [1, 0, 2];
-const podiumHeights = ["h-32", "h-44", "h-24"];
-
-export default function ResultsPage() {
+function ResultsContent() {
   const router = useRouter();
   const params = useParams();
   const code = params.code as string;
   const [showConfetti, setShowConfetti] = useState(true);
+  const [players, setPlayers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  let players: PlayerData[] = fallbackPlayers;
-  
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const raw = sessionStorage.getItem("finalPlayers");
-      if (raw) {
-        players = JSON.parse(raw);
+    const fetchResults = async () => {
+      try {
+        const res = await fetch(`/api/rooms/${code}`);
+        const data = await res.json();
+        
+        if (data.players) {
+          const sorted = [...data.players].sort((a: any, b: any) => b.score - a.score);
+          setPlayers(sorted);
+        }
+      } catch (err) {
+        console.error("Error fetching results:", err);
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, []);
+    };
+
+    fetchResults();
+  }, [code]);
 
   useEffect(() => {
     const t = setTimeout(() => setShowConfetti(false), 5000);
     return () => clearTimeout(t);
   }, []);
 
-  const sorted = [...players].sort((a, b) => b.score - a.score);
+  const podiumIcons = [
+    <Trophy className="text-neon-yellow" size={32} key="trophy" />,
+    <Medal className="text-muted-foreground" size={28} key="medal" />,
+    <Award className="text-neon-orange" size={24} key="award" />,
+  ];
+
+  const podiumOrder = [1, 0, 2];
+  const podiumHeights = ["h-32", "h-44", "h-24"];
+
+  if (isLoading) {
+    return (
+      <div className="relative min-h-screen gradient-bg-animated flex items-center justify-center">
+        <ParticleBackground />
+        <div className="flex items-center gap-2 text-primary font-display text-xl">
+          <Loader2 className="animate-spin" />
+          Carregando resultados...
+        </div>
+      </div>
+    );
+  }
+
+  const sorted = [...players].sort((a: any, b: any) => b.score - a.score);
   const top3 = sorted.slice(0, 3);
 
   return (
@@ -73,7 +87,6 @@ export default function ResultsPage() {
           <p className="text-muted-foreground font-ui">Sala {code}</p>
         </div>
 
-        {/* Podium */}
         <div className="flex items-end justify-center gap-4">
           {podiumOrder.map((pos, visualIdx) => {
             const player = top3[pos];
@@ -104,9 +117,8 @@ export default function ResultsPage() {
           })}
         </div>
 
-        {/* Full ranking */}
         <div className="glass-card p-4 space-y-2">
-          {sorted.map((p, i) => (
+          {sorted.map((p: any, i: number) => (
             <motion.div
               key={p.id}
               initial={{ opacity: 0, x: -20 }}
@@ -122,7 +134,6 @@ export default function ResultsPage() {
           ))}
         </div>
 
-        {/* Actions */}
         <div className="flex gap-3">
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -143,5 +154,13 @@ export default function ResultsPage() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense>
+      <ResultsContent />
+    </Suspense>
   );
 }
