@@ -22,7 +22,51 @@ function GameContent() {
   const [showRoundResult, setShowRoundResult] = useState(false);
   const [scorePopup, setScorePopup] = useState<number | null>(null);
   const [roundResult, setRoundResult] = useState<any>(null);
+  const [preGameCountdown, setPreGameCountdown] = useState<number | null>(null);
+  const [resultCountdown, setResultCountdown] = useState<number | null>(null);
   const startTimeRef = useRef<number>(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showRoundResult && (resultCountdown === null || resultCountdown === 0)) {
+      setResultCountdown(10);
+    } else if (!showRoundResult) {
+      setResultCountdown(null);
+    }
+  }, [showRoundResult]);
+
+  useEffect(() => {
+    if (resultCountdown !== null && resultCountdown > 0 && showRoundResult) {
+      const timer = setTimeout(() => setResultCountdown(resultCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resultCountdown, showRoundResult]);
+
+  useEffect(() => {
+    if (currentRound?.round_number === 1 && preGameCountdown === null && !showRoundResult && !answered) {
+      setPreGameCountdown(6);
+    }
+  }, [currentRound?.round_number]);
+
+  useEffect(() => {
+    if (preGameCountdown !== null && preGameCountdown > 0) {
+      const timer = setTimeout(() => setPreGameCountdown(preGameCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (preGameCountdown === 0) {
+      const timer = setTimeout(() => setPreGameCountdown(null), 1000); // Hide after showing "JÁ!"
+      return () => clearTimeout(timer);
+    }
+  }, [preGameCountdown]);
+
+  useEffect(() => {
+    if (currentRound?.status === 'active' && !showRoundResult && preGameCountdown === null) {
+      // Focus input when a new round starts or round result is closed
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [currentRound?.id, currentRound?.status, showRoundResult, preGameCountdown]);
 
   useEffect(() => {
     if (room) {
@@ -83,7 +127,7 @@ function GameContent() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ sessionId: playerData.sessionId }),
                 });
-              }, 5000);
+              }, 10000);
             }
           } catch (err) {
             console.error("Error handling round finish:", err);
@@ -147,11 +191,15 @@ function GameContent() {
         setTimeout(() => setScorePopup(null), 800);
       } else {
         setFeedback("wrong");
-        setAnswered(false); // Allow multiple tries
+        setAnswered(false);
+        setAnswer(""); // Clear for another try
+        inputRef.current?.focus();
       }
     } catch (err) {
       setFeedback("wrong");
       setAnswered(false);
+      setAnswer("");
+      inputRef.current?.focus();
     }
   };
 
@@ -183,9 +231,12 @@ function GameContent() {
       <div className="relative z-10 h-screen flex flex-col lg:flex-row">
         <div className="flex-1 flex flex-col p-4 lg:p-6 min-w-0">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <span className="font-display text-xs text-primary tracking-widest uppercase">
+            <div className="flex flex-col">
+              <span className="font-display text-[10px] text-primary/70 tracking-widest uppercase">
                 Rodada {currentRound.round_number}
+              </span>
+              <span className="font-display text-sm font-black gradient-text">
+                ALVO: 120 PTS
               </span>
             </div>
             <TimerRing timeLeft={timeLeft} totalTime={room?.time_per_round || 30} />
@@ -193,13 +244,43 @@ function GameContent() {
 
           <div className="flex-1 flex items-center justify-center relative">
             <AnimatePresence mode="wait">
+              {preGameCountdown !== null ? (
+                <motion.div
+                  key="countdown-overlay"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-50 flex items-center justify-center bg-background/20 backdrop-blur-sm rounded-2xl overflow-hidden"
+                >
+                  <motion.div
+                    key={`count-${preGameCountdown}`}
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1.2, opacity: 1 }}
+                    transition={{ type: "spring", damping: 12, stiffness: 200 }}
+                    className="flex flex-col items-center gap-4"
+                  >
+                    <span className="font-display text-[120px] font-black gradient-text drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                      {preGameCountdown === 0 ? "JÁ!" : preGameCountdown}
+                    </span>
+                    <motion.p
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      className="text-primary font-display tracking-[0.5em] text-sm uppercase -mt-4 opacity-70"
+                    >
+                      Prepare-se
+                    </motion.p>
+                  </motion.div>
+                </motion.div>
+              ) : null}
+
               {!showRoundResult ? (
                 <motion.div
                   key={`q-${currentRound.round_number}`}
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 1.05 }}
-                  className="glass-card p-2 max-w-lg w-full flex flex-col gap-4"
+                  className={`glass-card p-2 max-w-lg w-full flex flex-col gap-4 transition-all duration-700 ${preGameCountdown !== null ? "blur-md brightness-50 grayscale select-none" : ""
+                    }`}
                 >
                   {(currentRound as any).question && (
                     <div className="px-4 py-2 bg-primary/10 rounded-lg border border-primary/20">
@@ -208,11 +289,18 @@ function GameContent() {
                       </p>
                     </div>
                   )}
-                  <img
-                    src={currentRound.image_url}
-                    alt="Quiz"
-                    className="w-full h-48 sm:h-64 lg:h-80 object-cover rounded-lg"
-                  />
+                  <div className="relative overflow-hidden rounded-lg group">
+                    <img
+                      src={currentRound.image_url}
+                      alt="Quiz"
+                      className="w-full h-48 sm:h-64 lg:h-80 object-cover"
+                    />
+                    {preGameCountdown !== null && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-primary/5">
+                        <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               ) : (
                 <motion.div
@@ -237,11 +325,23 @@ function GameContent() {
                       </div>
                     </div>
                   )}
-                  <p className="text-sm text-muted-foreground font-ui mb-6">
+                  <div className="text-sm text-muted-foreground font-ui mb-6">
                     {roundResult?.gameFinished
-                      ? `🏆 ${roundResult?.winner?.name || "Alguém"} venceu o jogo!`
-                      : "Próxima rodada em breve..."}
-                  </p>
+                      ? <span className="text-lg font-bold text-primary block">🏆 {roundResult?.winner?.name || "Alguém"} venceu o jogo!</span>
+                      : (
+                        <div className="flex flex-col gap-1">
+                          <span>Próxima rodada em</span>
+                          <motion.span
+                            key={resultCountdown}
+                            initial={{ scale: 1.2, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="text-xl font-black text-primary"
+                          >
+                            {resultCountdown}s
+                          </motion.span>
+                        </div>
+                      )}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -267,6 +367,7 @@ function GameContent() {
               className={`flex gap-3 mt-4 ${feedback === "wrong" ? "animate-[shake_0.3s_ease]" : ""}`}
             >
               <input
+                ref={inputRef}
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submitAnswer()}
@@ -308,7 +409,7 @@ function GameContent() {
 
         <div className="w-full lg:w-80 flex flex-col gap-3 p-4 lg:p-6 lg:border-l border-border overflow-y-auto">
           <div className="flex-1 min-h-0">
-            <RankingList players={players} currentPlayerId={JSON.parse(sessionStorage.getItem("player") || "{}").id || ""} />
+            <RankingList players={players} answers={answers} currentPlayerId={JSON.parse(sessionStorage.getItem("player") || "{}").id || ""} />
           </div>
           <div className="flex-1 min-h-0">
             <ChatPanel roomCode={code} />

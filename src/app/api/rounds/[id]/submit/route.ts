@@ -43,15 +43,16 @@ export async function POST(
       return NextResponse.json({ error: 'Round is not active' }, { status: 400 })
     }
 
-    const { data: existingAnswer } = await supabase
+    const { data: existingCorrectAnswer } = await supabase
       .from('round_answers')
       .select('*')
       .eq('round_id', roundId)
       .eq('player_id', playerId)
+      .eq('is_correct', true)
       .single()
 
-    if (existingAnswer) {
-      return NextResponse.json({ error: 'Already answered' }, { status: 400 })
+    if (existingCorrectAnswer) {
+      return NextResponse.json({ error: 'Already answered correctly' }, { status: 400 })
     }
 
     const normalizedAnswer = answer.toLowerCase().trim()
