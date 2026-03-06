@@ -289,18 +289,30 @@ function GameContent() {
                       </p>
                     </div>
                   )}
-                  <div className="relative overflow-hidden rounded-lg group">
-                    <img
-                      src={currentRound.image_url}
-                      alt="Quiz"
-                      className="w-full h-48 sm:h-64 lg:h-80 object-cover"
-                    />
-                    {preGameCountdown !== null && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-primary/5">
-                        <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                  {currentRound.image_url && currentRound.image_url.trim() !== '' && (
+                    <div className="relative overflow-hidden rounded-lg group">
+                      <div className="w-full h-48 sm:h-64 lg:h-80 bg-white rounded-lg flex items-center justify-center">
+                        <img
+                          src={currentRound.image_url}
+                          alt="Quiz"
+                          className="w-full h-full object-contain p-2"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm">🖼️ Imagem indisponível</div>';
+                            }
+                          }}
+                        />
                       </div>
-                    )}
-                  </div>
+                      {preGameCountdown !== null && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-primary/5">
+                          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               ) : (
                 <motion.div
