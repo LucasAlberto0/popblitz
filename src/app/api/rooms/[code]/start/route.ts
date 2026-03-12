@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 const SAMPLE_IMAGES = [
   {
-    url: 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?auto=format&fit=crop&q=80&w=800',
+    url: 'https://upload.wikimedia.org/wikipedia/en/0/03/Walter_White_S5B.png',
     question: 'Quem é esse icônico professor de química transformado em mestre do crime?',
     answer: 'Walter White',
     hints: ['Breaking Bad', 'Heisenberg'],
@@ -17,7 +17,14 @@ const SAMPLE_IMAGES = [
     alternative_answers: [] as string[]
   },
   {
-    url: 'https://images.unsplash.com/photo-1585951237318-9ea5e175b891?auto=format&fit=crop&q=80&w=800',
+    url: 'https://upload.wikimedia.org/wikipedia/pt/d/d4/Harry_Potter_e_a_Pedra_Filosofal_2001.jpg',
+    question: 'Qual o nome do bruxo mais famoso de Hogwarts?',
+    answer: 'Harry Potter',
+    hints: ['O Menino que Sobreviveu', 'Gryffindor'],
+    alternative_answers: [] as string[]
+  },
+  {
+    url: 'https://upload.wikimedia.org/wikipedia/en/a/a9/MarioNSMBUDeluxe.png',
     question: 'Qual o nome desse personagem da Nintendo conhecido por salvar a Princesa Peach?',
     answer: 'Super Mario',
     hints: ['Encanador italiano', 'Cogumelos'],
@@ -31,7 +38,7 @@ const SAMPLE_IMAGES = [
     alternative_answers: [] as string[]
   },
   {
-    url: 'https://images.unsplash.com/photo-1598387181032-a3103a2db5b3?auto=format&fit=crop&q=80&w=800',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/3/33/Michael_Jackson_in_1988.jpg',
     question: 'Quem é conhecido mundialmente como o Rei do Pop e criador do Moonwalk?',
     answer: 'Michael Jackson',
     hints: ['Thriller', 'Billie Jean'],
@@ -45,17 +52,31 @@ const SAMPLE_IMAGES = [
     alternative_answers: [] as string[]
   },
   {
-    url: 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?auto=format&fit=crop&q=80&w=800',
+    url: 'https://upload.wikimedia.org/wikipedia/en/2/21/Web_of_Spider-Man_Vol_1_129-1.png',
     question: 'Quem é o super-herói amigo da vizinhança que usa um traje vermelho e azul?',
     answer: 'Homem-Aranha',
     hints: ['Peter Parker', 'Marvel'],
     alternative_answers: [] as string[]
   },
   {
-    url: 'https://images.unsplash.com/photo-1605462863863-10d9e47e15ee?auto=format&fit=crop&q=80&w=800',
-    question: 'Qual o nome do bruxo mais famoso de Hogwarts?',
-    answer: 'Harry Potter',
-    hints: ['O Menino que Sobreviveu', 'Gryffindor'],
+    url: 'https://upload.wikimedia.org/wikipedia/en/1/1c/Joker_%28DC_Comics_character%29.jpg',
+    question: 'Qual o vilão mais famoso do Batman?',
+    answer: 'Coringa',
+    hints: ['Risada', 'Gotham City'],
+    alternative_answers: [] as string[]
+  },
+  {
+    url: 'https://upload.wikimedia.org/wikipedia/en/b/be/Vader_77.png',
+    question: 'Quem disse a frase: "Eu sou seu pai"?',
+    answer: 'Darth Vader',
+    hints: ['Star Wars', 'Lado Negro'],
+    alternative_answers: [] as string[]
+  },
+  {
+    url: 'https://upload.wikimedia.org/wikipedia/commons/a/af/Tour_Eiffel_2014.jpg',
+    question: 'Em que cidade fica a Torre Eiffel?',
+    answer: 'Paris',
+    hints: ['França', 'Cidade Luz'],
     alternative_answers: [] as string[]
   },
 ]
