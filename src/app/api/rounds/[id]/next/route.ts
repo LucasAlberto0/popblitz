@@ -102,9 +102,17 @@ export async function POST(
             // 2. Fetch a random new question from the pool
             let nextQuestion = null
             try {
-                const { data: poolData, error: poolError } = await supabase
-                    .from('question_pool')
-                    .select('*');
+                let query = supabase.from('question_pool').select('*')
+                
+                if (currentRound.room.difficulty && currentRound.room.difficulty !== 'all') {
+                    query = query.eq('difficulty', currentRound.room.difficulty)
+                }
+
+                if (!currentRound.room.include_audio) {
+                    query = query.neq('type', 'audio')
+                }
+
+                const { data: poolData, error: poolError } = await query;
 
                 if (poolError) throw poolError;
 
@@ -121,12 +129,14 @@ export async function POST(
             const newRoundData = nextQuestion
                 ? {
                     url: nextQuestion.image_url || '',
+                    audio_url: nextQuestion.audio_url || '',
+                    type: nextQuestion.type || 'image',
                     question: nextQuestion.question,
                     answer: nextQuestion.primary_answer,
                     hints: nextQuestion.hints || [],
                     alternative_answers: nextQuestion.alternative_answers || []
                 }
-                : { ...SAMPLE_IMAGES[Math.floor(Math.random() * SAMPLE_IMAGES.length)], alternative_answers: [] }
+                : { ...SAMPLE_IMAGES[Math.floor(Math.random() * SAMPLE_IMAGES.length)], alternative_answers: [], audio_url: '', type: 'image' }
 
             const { data: newRound, error: createError } = await supabase
                 .from('rounds')
@@ -134,6 +144,8 @@ export async function POST(
                     room_id: currentRound.room.id,
                     round_number: currentRound.room.current_round + 1,
                     image_url: newRoundData.url,
+                    audio_url: newRoundData.audio_url,
+                    type: newRoundData.type,
                     question: newRoundData.question,
                     answer: newRoundData.answer,
                     answer_hints: [...newRoundData.hints, ...(newRoundData.alternative_answers || [])],

@@ -89,7 +89,7 @@ export async function POST(
     const { code } = await params
     const supabase = createAdminClient()
     const body = await request.json()
-    const { sessionId, maxScore, difficulty, timePerRound } = body
+    const { sessionId, maxScore, difficulty, timePerRound, includeAudio } = body
 
     const { data: room, error: roomError } = await supabase
       .from('rooms')
@@ -125,6 +125,10 @@ export async function POST(
       if (difficulty && difficulty !== 'all') {
         query = query.eq('difficulty', difficulty)
       }
+      
+      if (!includeAudio) {
+        query = query.neq('type', 'audio')
+      }
 
       const { data: poolData, error: poolError } = await query
 
@@ -139,6 +143,8 @@ export async function POST(
     const sourceQuestions = poolQuestions.length > 0
       ? poolQuestions.map(q => ({
         url: q.image_url || '',
+        audio_url: q.audio_url || '',
+        type: q.type || 'image',
         question: q.question,
         answer: q.primary_answer,
         hints: q.hints || [],
@@ -153,7 +159,9 @@ export async function POST(
     const roundsData = roundsToCreate.map((q, index) => ({
       room_id: room.id,
       round_number: index + 1,
-      image_url: q.url || '', // Can be empty for text rounds
+      image_url: q.url || '',
+      audio_url: (q as any).audio_url || '',
+      type: (q as any).type || 'image',
       question: q.question,
       answer: q.answer,
       answer_hints: [...(q.hints || []), ...(q.alternative_answers || [])],
@@ -178,6 +186,7 @@ export async function POST(
         time_per_round: timePerRound || 20,
         max_score: maxScore || 120,
         difficulty: difficulty || 'all',
+        include_audio: includeAudio || false,
         updated_at: new Date().toISOString()
       })
       .eq('id', room.id)

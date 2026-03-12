@@ -22,6 +22,7 @@ function LobbyContent() {
   const [maxScore, setMaxScore] = useState(120);
   const [difficulty, setDifficulty] = useState("all");
   const [timePerRound, setTimePerRound] = useState(20);
+  const [includeAudio, setIncludeAudio] = useState(false);
 
   // Redirect when game starts
   useEffect(() => {
@@ -48,7 +49,8 @@ function LobbyContent() {
           sessionId: playerData.sessionId,
           maxScore: maxScore,
           difficulty: difficulty,
-          timePerRound: timePerRound
+          timePerRound: timePerRound,
+          includeAudio: includeAudio
         }),
       });
       
@@ -257,6 +259,30 @@ function LobbyContent() {
                       <div className="w-full bg-secondary/50 border border-border/50 rounded-lg px-3 py-2 text-sm font-body text-primary/70">
                         {room?.time_per_round || 20} Segundos
                       </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-display text-muted-foreground tracking-widest uppercase cursor-pointer" htmlFor="audio-toggle">
+                        Incluir Rodadas de Áudio
+                      </label>
+                      {isHost ? (
+                        <input 
+                          id="audio-toggle"
+                          type="checkbox"
+                          className="w-5 h-5 accent-neon-cyan bg-background border-border rounded cursor-pointer"
+                          checked={includeAudio}
+                          onChange={(e) => setIncludeAudio(e.target.checked)}
+                        />
+                      ) : (
+                        <div className={`w-3 h-3 rounded-full ${(room as any)?.include_audio ? "bg-neon-cyan shadow-[0_0_8px_rgba(0,255,255,0.5)]" : "bg-muted-foreground/30"}`} />
+                      )}
+                    </div>
+                    {!isHost && (
+                      <p className="text-[10px] text-muted-foreground/60 italic">
+                        {(room as any)?.include_audio ? "Desafio musical ativado!" : "Apenas imagens e texto"}
+                      </p>
                     )}
                   </div>
                   

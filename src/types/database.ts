@@ -13,6 +13,7 @@ export interface Room {
   time_per_round: number
   max_score?: number
   difficulty?: string
+  include_audio?: boolean
   created_at: string
   updated_at: string
 }
@@ -35,6 +36,8 @@ export interface Round {
   room_id: string
   round_number: number
   image_url: string
+  audio_url?: string | null
+  type?: string
   answer: string
   answer_hints: string[]
   status: RoundStatus

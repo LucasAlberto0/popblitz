@@ -335,7 +335,56 @@ function GameContent() {
                     </div>
                   )}
                   
-                  {currentRound.image_url && currentRound.image_url.trim() !== '' && (
+                  {currentRound.type === 'audio' && currentRound.audio_url && (
+                    <div className="relative overflow-hidden rounded-lg group bg-primary/5 p-8 flex flex-col items-center justify-center gap-6 min-h-[16rem]">
+                       <div className="relative">
+                          <motion.div 
+                            animate={{ scale: [1, 1.1, 1] }} 
+                            transition={{ duration: 1.5, repeat: Infinity }}
+                            className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center border-2 border-primary/40 shadow-[0_0_30px_rgba(var(--primary-rgb),0.3)]"
+                          >
+                            <svg className="w-12 h-12 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            </svg>
+                          </motion.div>
+                          
+                          {/* Visualizer bars animation */}
+                          <div className="flex gap-1 mt-4 justify-center">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                              <motion.div
+                                key={i}
+                                animate={{ height: [8, 24, 8] }}
+                                transition={{ duration: 0.5 + i * 0.1, repeat: Infinity }}
+                                className="w-1.5 bg-primary/60 rounded-full"
+                              />
+                            ))}
+                          </div>
+                       </div>
+
+                       <p className="text-primary font-display text-lg tracking-wide animate-pulse">
+                         Ouvindo a trilha...
+                       </p>
+
+                       <audio 
+                         autoPlay 
+                         src={currentRound.audio_url} 
+                         ref={(el) => {
+                           if (el && preGameCountdown === null && !showRoundResult) {
+                             el.volume = 0.5;
+                             el.play().catch(e => console.log("Audio autoplay prevented", e));
+                           }
+                         }}
+                       />
+
+                       {preGameCountdown !== null && (
+                         <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-lg backdrop-blur-sm">
+                           <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                         </div>
+                       )}
+                    </div>
+                  )}
+
+                  {(currentRound.type === 'image' || !currentRound.type) && currentRound.image_url && currentRound.image_url.trim() !== '' && (
                     <div className="relative overflow-hidden rounded-lg group bg-white p-2 sm:p-4">
                       <img
                         src={currentRound.image_url}
