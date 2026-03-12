@@ -1,3 +1,15 @@
+# Next.js
+.next/
+out/
+next-env.d.ts
+next.config.mjs
+next.config.js
+
+# Build
+dist
+dist-ssr
+*.local
+
 # Logs
 logs
 *.log

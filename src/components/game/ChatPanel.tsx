@@ -1,6 +1,9 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 interface ChatMessage {
   id: string;
@@ -10,33 +13,69 @@ interface ChatMessage {
   isSystem?: boolean;
 }
 
-const mockMessages: ChatMessage[] = [
-  { id: "1", sender: "Sistema", text: "A rodada começou!", timestamp: "00:01", isSystem: true },
-  { id: "2", sender: "Luna", text: "essa é fácil!", timestamp: "00:03" },
-  { id: "3", sender: "Blaze", text: "hmm 🤔", timestamp: "00:05" },
-  { id: "4", sender: "Sistema", text: "Luna acertou! +150 pontos", timestamp: "00:06", isSystem: true },
-];
+interface ChatPanelProps {
+  roomCode?: string;
+}
 
-const ChatPanel = () => {
-  const [messages, setMessages] = useState(mockMessages);
+const ChatPanel = ({ roomCode }: ChatPanelProps) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [player, setPlayer] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const supabase = createClient();
+
+  useEffect(() => {
+    const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+    setPlayer(playerData);
+  }, []);
+
+  useEffect(() => {
+    if (!roomCode || !player) return;
+
+    const channel = supabase.channel(`chat:${roomCode}`, {
+      config: {
+        broadcast: { self: true },
+      },
+    });
+
+    channel
+      .on("broadcast", { event: "message" }, (payload) => {
+        const newMessage = payload.payload as ChatMessage;
+        setMessages((prev) => [...prev, newMessage]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [roomCode, player, supabase]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now().toString(), sender: "Você", text: input, timestamp: "agora" },
-    ]);
+  const sendMessage = async () => {
+    if (!input.trim() || !roomCode || !player) return;
+
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      sender: player.name || "Jogador",
+      text: input,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    const channel = supabase.channel(`chat:${roomCode}`);
+    await channel.send({
+      type: "broadcast",
+      event: "message",
+      payload: newMessage,
+    });
+
     setInput("");
   };
 
   return (
-    <div className="glass-card flex flex-col h-full">
+    <div className="glass-card flex flex-col h-full min-h-[300px] lg:min-h-0">
       <div className="px-4 py-3 border-b border-border">
         <h3 className="font-display text-xs tracking-widest text-primary uppercase">Chat</h3>
       </div>
@@ -51,9 +90,14 @@ const ChatPanel = () => {
               className={`text-sm ${msg.isSystem ? "text-neon-green font-ui italic" : ""}`}
             >
               {!msg.isSystem && (
-                <span className="font-semibold text-secondary mr-1">{msg.sender}:</span>
+                <span className={`font-semibold mr-1 ${msg.sender === (player?.name || "Você") ? "text-primary" : "text-secondary"}`}>
+                  {msg.sender}:
+                </span>
               )}
               <span className={msg.isSystem ? "" : "text-muted-foreground"}>{msg.text}</span>
+              {!msg.isSystem && (
+                <span className="text-[10px] text-muted-foreground/50 ml-2">{msg.timestamp}</span>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
@@ -64,12 +108,13 @@ const ChatPanel = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Digite aqui..."
+          placeholder="Diga algo..."
           className="flex-1 bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:neon-border-cyan transition-all"
         />
         <button
           onClick={sendMessage}
-          className="btn-neon rounded-lg p-2 text-primary-foreground"
+          disabled={!input.trim()}
+          className="btn-neon rounded-lg p-2 text-primary-foreground disabled:opacity-50"
         >
           <Send size={16} />
         </button>
