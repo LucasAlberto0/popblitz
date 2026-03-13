@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import PlayerCard from "./PlayerCard";
 import { Player, RoundAnswer } from "@/types/database";
 
@@ -20,28 +20,30 @@ const RankingList = ({ players, currentPlayerId, answers, maxScore }: RankingLis
         <h3 className="font-display text-xs tracking-widest text-primary uppercase">Ranking</h3>
         <span className="text-[10px] font-display font-medium text-muted-foreground/60">ALVO: {maxScore} PTS</span>
       </div>
-      <motion.div className="space-y-2">
-        {sorted.map((player, i) => {
-          const playerAnswers = answers.filter(a => a.player_id === player.id);
-          const correctAnswer = playerAnswers.find(a => a.is_correct);
-          const lastGuess = playerAnswers[playerAnswers.length - 1]?.answer;
-          const isSpectator = player.status === 'ready';
+      <motion.div className="space-y-2" layout>
+        <AnimatePresence mode="popLayout">
+          {sorted.map((player, i) => {
+            const playerAnswers = answers.filter(a => a.player_id === player.id);
+            const correctAnswer = playerAnswers.find(a => a.is_correct);
+            const lastGuess = playerAnswers[playerAnswers.length - 1]?.answer;
+            const isSpectator = player.status === 'ready';
 
-          return (
-            <PlayerCard
-              key={player.id}
-              name={player.name}
-              avatar={player.avatar}
-              score={player.score}
-              rank={i + 1}
-              isCorrect={!!correctAnswer}
-              responseTime={correctAnswer ? (correctAnswer.time_ms / 1000).toFixed(3) : undefined}
-              lastGuess={!correctAnswer && lastGuess ? lastGuess : undefined}
-              isCurrentPlayer={player.id === currentPlayerId}
-              isSpectator={isSpectator}
-            />
-          );
-        })}
+            return (
+              <PlayerCard
+                key={player.id}
+                name={player.name}
+                avatar={player.avatar}
+                score={player.score}
+                rank={i + 1}
+                isCorrect={!!correctAnswer}
+                responseTime={correctAnswer ? (correctAnswer.time_ms / 1000).toFixed(3) : undefined}
+                lastGuess={!correctAnswer && lastGuess ? lastGuess : undefined}
+                isCurrentPlayer={player.id === currentPlayerId}
+                isSpectator={isSpectator}
+              />
+            );
+          })}
+        </AnimatePresence>
       </motion.div>
     </div>
   );

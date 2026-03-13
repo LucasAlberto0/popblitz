@@ -52,6 +52,14 @@ export async function POST(
     const maxScore = round.room.max_score || 120
     const winner = players?.find(p => p.score >= maxScore)
 
+    // Sync room status if game finished
+    if (winner && round.room.status !== 'finished') {
+      await supabase
+        .from('rooms')
+        .update({ status: 'finished', updated_at: new Date().toISOString() })
+        .eq('id', round.room.id)
+    }
+
     return NextResponse.json({
       success: true,
       roundFinished: round.round_number,

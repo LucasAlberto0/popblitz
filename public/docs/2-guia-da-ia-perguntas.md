@@ -34,8 +34,9 @@ Para inserir ou atualizar novas perguntas massivamente, você deverá preparar o
 * `primary_answer` (text): A string resposta **exatamente formatada e capitalizada**, usada para exibir quem "Acertou" no painel de sucesso (Ex: *"Leonardo DiCaprio"*).
 * `alternative_answers` (jsonb array): Atalhos, siglas, títulos abrasileirados ou erros de digitação comuns em caixa baixa (Ex: `["dicaprio", "leonardo di caprio"]`). O backend do jogo normatiza automaticamente removendo acentos, então `Coração` e `coracao` batem sozinhos, não precisa incluir versões sem acento, apenas nomes sinônimos.
 * `difficulty` (text): Enum (`very_easy`, `easy`, `medium`, `hard`, `impossible`).
-* `type` (text): `'image'` ou `'text'`.
+* `type` (text): `'image'`, `'text'` ou `'audio'`.
 * `image_url` (text): Link ABSOLUTO de uma imagem hospedada. *Se `type` for `'text'`, passe null.*
+* `audio_url` (text): Link ABSOLUTO do áudio hospedado no bucket `question-audio`. *Se `type` não for `'audio'`, passe null.*
 * `category` (text): Categorias como `'pop-culture'`, `'movies'`, `'music'`, `'games'`, `'sports'`, `'anime'`, `'brazil'`.
 
 ---
@@ -95,3 +96,25 @@ Quando a máquina (outra sessão de Agente/IA) precisar inserir dezenas de pergu
 5. A IA finalmente insere o array destas URLs no database via Inserção Postgres, atrelando as perguntas formuladas. 
 
 *Seguir este manual garante que o pop-guess nunca fique com "imagens quebradas" nas rodadas.*
+---
+
+## 🎶 6. Regras Para Perguntas de Áudio (Soundtracks)
+
+Perguntas de áudio são desafios onde o jogador deve reconhecer a obra pela música ou tema principal.
+
+### Regras de Qualidade:
+1. **Originalidade MÁXIMA:** Nunca use covers, bandas de baile, versões tocadas por fãs no piano ou áudios com aplausos/vozes de fundo. Use o **Soundtrack Original (OST)**.
+2. **O Ponto de Impacto (Refrão):** Não comece o áudio pelo silêncio ou pela intro lenta. O áudio deve começar exatamente no **refrão mais icônico** ou no **riff mais forte** (Ex: Em Titanic, comece no minuto 3:11, não na flautinha do começo).
+3. **Corte Rígido:** O áudio deve ter no máximo **20 segundos**. Use scripts com `ffmpeg` para realizar o trim preciso.
+4. **Pergunta Específica por Mídia OBRIGATÓRIA:** Todas as perguntas de áudio devem indicar o tipo de mídia no enunciado para clareza:
+   - Se for jogo: **"De qual jogo é essa trilha sonora?"**
+   - Se for filme: **"De qual filme é essa trilha sonora?"**
+   - Se for série: **"De qual série é essa trilha sonora?"**
+5. **Imagens sem Spoiler:** Quando a pergunta de áudio for acompanhada por uma imagem, siga a **Regra 2 (Screenshots cinematicos)**. A imagem deve ajudar no clima da pergunta sem entregar o nome da obra por escrito.
+
+### Fluxo de Inserção de Áudio:
+1. Use `yt-dlp` com o prefixo `ytsearch:` para encontrar a versão oficial/vevo no YouTube.
+2. Realize o download apenas do áudio (`mp3` / `128k`).
+3. Corte o arquivo usando `ffmpeg -ss [inicio] -t 20`.
+4. Faça o upload para o bucket `question-audio` no Supabase Storage.
+5. Salve a URL definitiva no campo `audio_url` da tabela `question_pool` com o `type='audio'`.

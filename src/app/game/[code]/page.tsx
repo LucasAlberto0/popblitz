@@ -27,6 +27,7 @@ function GameContent() {
   const startTimeRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioPlayedRef = useRef<boolean>(false);
+  const lastAnswersCountRef = useRef<number>(0);
 
   const [isJoining, setIsJoining] = useState(false);
 
@@ -36,7 +37,7 @@ function GameContent() {
 
   useEffect(() => {
     if (showRoundResult && (resultCountdown === null || resultCountdown === 0)) {
-      setResultCountdown(10);
+      setResultCountdown(room?.interval_time || 8);
     } else if (!showRoundResult) {
       setResultCountdown(null);
     }
@@ -81,6 +82,34 @@ function GameContent() {
       setIsHost(room.host_id === playerData.sessionId);
     }
   }, [room]);
+
+  // --- NEW: Sync answered/feedback state on mount or when answers change (Fixes re-entry bug) ---
+  useEffect(() => {
+    if (players.length > 0 && answers.length > 0 && currentRound && !showRoundResult) {
+      const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+      const myAnswers = answers.filter(a => a.player_id === playerData.id);
+      const hasCorrect = myAnswers.some(a => a.is_correct);
+      
+      setAnswered(hasCorrect);
+      if (hasCorrect) {
+        setFeedback("correct");
+      }
+    }
+  }, [answers, players, currentRound, showRoundResult]);
+
+  // --- NEW: Play sound for EVERYONE when ANYONE gets it right ---
+  useEffect(() => {
+    if (answers.length > lastAnswersCountRef.current) {
+      const newAnswers = answers.slice(lastAnswersCountRef.current);
+      const hasNewCorrect = newAnswers.some(a => a.is_correct);
+      
+      if (hasNewCorrect && !showRoundResult) {
+        const audio = new Audio('/sounds/msn.mp3?v=2');
+        audio.play().catch(() => {});
+      }
+    }
+    lastAnswersCountRef.current = answers.length;
+  }, [answers, showRoundResult]);
 
   useEffect(() => {
     if (room?.status === 'finished') {
@@ -146,10 +175,10 @@ function GameContent() {
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ sessionId: playerData.sessionId }),
                 });
-              }, 10000);
+              }, (room?.interval_time || 8) * 1000);
             }
           } catch (err) {
-            console.error("Error handling round finish:", err);
+            // Silently fail or handle gracefully in UI
           }
         };
 
@@ -181,29 +210,34 @@ function GameContent() {
       });
     }
     // Non-hosts just wait for the Realtime 'finished' event
-  };
+  };  const submitAnswer = async (overriddenAnswer?: string) => {
+    const currentAnswer = overriddenAnswer || answer.trim();
+    if (!currentAnswer || answered || !currentRound || showRoundResult || feedback === "correct") return;
 
-  const submitAnswer = async () => {
-    if (!answer.trim() || answered || !currentRound || showRoundResult) return;
+    setAnswered(true);
+    setFeedback(null);
 
+    const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+
+    // Calculate time offset for first round
     let startTimeRound = new Date(currentRound.started_at!).getTime();
     if (currentRound.round_number === 1) {
       startTimeRound += 7000;
     }
     const timeMs = Math.max(0, Date.now() - startTimeRound);
-    
-    setAnswered(true);
 
-    const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     try {
       const res = await fetch(`/api/rounds/${currentRound.id}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           playerId: playerData.id,
           playerSessionId: playerData.sessionId,
-          answer: answer.trim(),
+          answer: currentAnswer,
           timeMs,
         }),
       });
@@ -214,32 +248,29 @@ function GameContent() {
         setFeedback("correct");
         setScorePopup(data.pointsEarned);
         setTimeout(() => setScorePopup(null), 800);
+        setAnswer(""); 
       } else {
         setFeedback("wrong");
+        setAnswer(""); // Clear to allow immediate re-typing
         setAnswered(false);
-        setAnswer(""); // Clear for another try
-        // Use a small timeout to ensure React has re-enabled the input
+        // Small delay to ensure React has updated the DOM before focusing
         setTimeout(() => {
           inputRef.current?.focus();
-        }, 10);
+        }, 50);
       }
     } catch (err) {
       setFeedback("wrong");
-      setAnswered(false);
       setAnswer("");
+      setAnswered(false);
       setTimeout(() => {
         inputRef.current?.focus();
-      }, 10);
+      }, 50);
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 
-  useEffect(() => {
-    if (feedback === "correct" && !showRoundResult && !audioPlayedRef.current) {
-       audioPlayedRef.current = true;
-       const audio = new Audio('/sounds/msn.mp3?v=2');
-       audio.play().catch(e => console.log("Audio play prevented:", e));
-    }
-  }, [feedback, showRoundResult]);
+  // Removed local correct audio effect in favor of the global one above
 
   if (initialLoading) {
     return (
@@ -366,12 +397,16 @@ function GameContent() {
                        </p>
 
                        <audio 
-                         autoPlay 
                          src={currentRound.audio_url} 
                          ref={(el) => {
-                           if (el && preGameCountdown === null && !showRoundResult) {
+                           if (el) {
                              el.volume = 0.5;
-                             el.play().catch(e => console.log("Audio autoplay prevented", e));
+                             if (preGameCountdown === null && !showRoundResult) {
+                               el.play().catch(() => {});
+                             } else {
+                               el.pause();
+                               el.currentTime = 0;
+                             }
                            }
                          }}
                        />
@@ -452,14 +487,14 @@ function GameContent() {
             </AnimatePresence>
 
             <AnimatePresence>
-              {scorePopup && (
+              {scorePopup !== null && (
                 <motion.div
                   initial={{ scale: 0, y: 0 }}
                   animate={{ scale: 1.3, y: -60 }}
                   exit={{ opacity: 0, y: -100 }}
-                  className="absolute top-1/3 font-display text-3xl font-black text-neon-green glow-cyan pointer-events-none"
+                  className={`absolute top-1/3 font-display text-3xl font-black ${scorePopup > 0 ? "text-neon-green glow-cyan" : "text-destructive glow-magenta"} pointer-events-none`}
                 >
-                  +{scorePopup}
+                  {scorePopup > 0 ? `+${scorePopup}` : scorePopup}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -490,6 +525,45 @@ function GameContent() {
                  {isJoining ? "Entrando..." : "Entrar no Jogo"}
               </motion.button>
             </div>
+          ) : !showRoundResult && currentRound.type === 'boolean' ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-4 mt-6 justify-center w-full"
+            >
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                disabled={answered}
+                onClick={() => {
+                  setAnswer("Verdadeiro");
+                  submitAnswer("Verdadeiro");
+                }}
+                className={`flex-1 py-6 rounded-2xl font-display text-xl tracking-widest uppercase transition-all shadow-lg ${
+                  answered && answer === "Verdadeiro" 
+                  ? "bg-neon-green text-black scale-95 shadow-neon-green/40" 
+                  : "bg-background/10 border-2 border-neon-green text-neon-green hover:bg-neon-green/10"
+                } disabled:opacity-50`}
+              >
+                Verdadeiro
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                disabled={answered}
+                onClick={() => {
+                  setAnswer("Falso");
+                  submitAnswer("Falso");
+                }}
+                className={`flex-1 py-6 rounded-2xl font-display text-xl tracking-widest uppercase transition-all shadow-lg ${
+                  answered && answer === "Falso" 
+                  ? "bg-destructive text-black scale-95 shadow-destructive/40" 
+                  : "bg-background/10 border-2 border-destructive text-destructive hover:bg-destructive/10"
+                } disabled:opacity-50`}
+              >
+                Falso
+              </motion.button>
+            </motion.div>
           ) : !showRoundResult && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -499,22 +573,25 @@ function GameContent() {
               <input
                 ref={inputRef}
                 value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
+                onChange={(e) => {
+                  setAnswer(e.target.value);
+                  if (feedback === "wrong") setFeedback(null);
+                }}
                 onKeyDown={(e) => e.key === "Enter" && submitAnswer()}
                 placeholder="Sua resposta..."
-                disabled={answered}
+                disabled={feedback === "correct" || showRoundResult}
                 className={`flex-1 bg-input border rounded-xl px-4 py-3 font-body text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${feedback === "correct"
                   ? "border-neon-green neon-border-cyan"
                   : feedback === "wrong"
-                    ? "border-destructive"
+                    ? "border-destructive shake-wrong"
                     : "border-border focus:neon-border-cyan"
                   } disabled:opacity-50`}
               />
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={submitAnswer}
-                disabled={answered || !answer.trim()}
+                onClick={() => submitAnswer()}
+                disabled={answered || !answer.trim() || feedback === "correct"}
                 className="btn-neon px-6 py-3 rounded-xl text-primary-foreground font-display text-xs tracking-widest disabled:opacity-40"
               >
                 Enviar

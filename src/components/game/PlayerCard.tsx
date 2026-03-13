@@ -57,7 +57,17 @@ const PlayerCard = ({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="font-ui font-bold text-sm truncate text-foreground/90">{name}</p>
+          <p className="font-ui font-bold text-sm truncate text-foreground/90 flex items-center gap-1">
+            {name}
+            {rank === 1 && !isSpectator && (
+              <motion.span 
+                animate={{ rotate: [0, 10, -10, 0] }} 
+                transition={{ repeat: Infinity, duration: 2 }}
+              >
+                👑
+              </motion.span>
+            )}
+          </p>
         </div>
 
         <div className="min-h-[16px] flex items-center mt-0.5">

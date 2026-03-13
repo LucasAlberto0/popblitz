@@ -22,7 +22,9 @@ function LobbyContent() {
   const [maxScore, setMaxScore] = useState(120);
   const [difficulty, setDifficulty] = useState("all");
   const [timePerRound, setTimePerRound] = useState(20);
+  const [intervalTime, setIntervalTime] = useState(8);
   const [includeAudio, setIncludeAudio] = useState(false);
+  const [onlyAudio, setOnlyAudio] = useState(false);
 
   // Redirect when game starts
   useEffect(() => {
@@ -50,7 +52,9 @@ function LobbyContent() {
           maxScore: maxScore,
           difficulty: difficulty,
           timePerRound: timePerRound,
-          includeAudio: includeAudio
+          intervalTime: intervalTime,
+          includeAudio: includeAudio,
+          onlyAudio: onlyAudio
         }),
       });
       
@@ -187,7 +191,7 @@ function LobbyContent() {
                   Regras do Jogo
                 </h3>
                 
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
                   <div className="space-y-2">
                     <label className="text-xs font-display text-muted-foreground tracking-widest uppercase">
                       Alvo de Pontos
@@ -238,6 +242,34 @@ function LobbyContent() {
                       </div>
                     )}
                   </div>
+
+                  <div className="space-y-2 pt-2 border-t border-border/30">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-display text-muted-foreground tracking-widest uppercase cursor-pointer" htmlFor="audio-toggle">
+                        Incluir Rodadas de Áudio
+                      </label>
+                      {isHost ? (
+                        <input 
+                          id="audio-toggle"
+                          type="checkbox"
+                          className="w-5 h-5 accent-neon-cyan bg-background border-border rounded cursor-pointer"
+                          checked={includeAudio}
+                          onChange={(e) => {
+                            setIncludeAudio(e.target.checked);
+                            if (e.target.checked) setTimePerRound(20);
+                          }}
+                        />
+                      ) : (
+                        <div className={`w-3 h-3 rounded-full ${(room as any)?.include_audio ? "bg-neon-cyan shadow-[0_0_8px_rgba(0,255,255,0.5)]" : "bg-muted-foreground/30"}`} />
+                      )}
+                    </div>
+                    {/* Only Audio (Debug) removed as per user request */}
+                    {!isHost && (
+                      <p className="text-[10px] text-muted-foreground/60 italic">
+                        {(room as any)?.include_audio ? "Desafio musical ativado!" : "Apenas imagens e texto"}
+                      </p>
+                    )}
+                  </div>
                   
                   <div className="space-y-2">
                     <label className="text-xs font-display text-muted-foreground tracking-widest uppercase">
@@ -245,9 +277,10 @@ function LobbyContent() {
                     </label>
                     {isHost ? (
                       <select 
-                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm font-body text-primary focus:outline-none focus:border-neon-cyan"
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm font-body text-primary focus:outline-none focus:border-neon-cyan disabled:opacity-50"
                         value={timePerRound}
                         onChange={(e) => setTimePerRound(Number(e.target.value))}
+                        disabled={includeAudio}
                       >
                         <option value={10}>10 Segundos</option>
                         <option value={15}>15 Segundos</option>
@@ -260,31 +293,35 @@ function LobbyContent() {
                         {room?.time_per_round || 20} Segundos
                       </div>
                     )}
-                  </div>
-
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-display text-muted-foreground tracking-widest uppercase cursor-pointer" htmlFor="audio-toggle">
-                        Incluir Rodadas de Áudio
-                      </label>
-                      {isHost ? (
-                        <input 
-                          id="audio-toggle"
-                          type="checkbox"
-                          className="w-5 h-5 accent-neon-cyan bg-background border-border rounded cursor-pointer"
-                          checked={includeAudio}
-                          onChange={(e) => setIncludeAudio(e.target.checked)}
-                        />
-                      ) : (
-                        <div className={`w-3 h-3 rounded-full ${(room as any)?.include_audio ? "bg-neon-cyan shadow-[0_0_8px_rgba(0,255,255,0.5)]" : "bg-muted-foreground/30"}`} />
-                      )}
-                    </div>
-                    {!isHost && (
-                      <p className="text-[10px] text-muted-foreground/60 italic">
-                        {(room as any)?.include_audio ? "Desafio musical ativado!" : "Apenas imagens e texto"}
+                    {isHost && includeAudio && (
+                      <p className="text-[10px] text-neon-cyan/70 mt-1 uppercase font-display letter-spacing-widest">
+                        * Áudio trava tempo em 20s
                       </p>
                     )}
                   </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-display text-muted-foreground tracking-widest uppercase">
+                      Intervalo entre Rodadas
+                    </label>
+                    {isHost ? (
+                      <select 
+                        className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm font-body text-primary focus:outline-none focus:border-neon-cyan"
+                        value={intervalTime}
+                        onChange={(e) => setIntervalTime(Number(e.target.value))}
+                      >
+                        <option value={5}>Curto (5s)</option>
+                        <option value={8}>Padrão (8s)</option>
+                        <option value={10}>Médio (10s)</option>
+                        <option value={14}>Longo (14s)</option>
+                      </select>
+                    ) : (
+                      <div className="w-full bg-secondary/50 border border-border/50 rounded-lg px-3 py-2 text-sm font-body text-primary/70">
+                        {(room as any)?.interval_time || 8} Segundos
+                      </div>
+                    )}
+                  </div>
+
                   
                   {!isHost && (
                     <p className="text-xs text-muted-foreground italic mt-4">
