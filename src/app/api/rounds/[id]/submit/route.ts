@@ -147,15 +147,18 @@ export async function POST(
 
     if (answerError) throw answerError
 
-    const { error: updatePlayerError } = await supabase
-      .from('players')
-      .update({
-        score: player.score + pointsEarned,
-        streak: newStreak
-      })
-      .eq('id', playerId)
+    // Do not update player score immediately for boolean rounds
+    if (round.type !== 'boolean') {
+      const { error: updatePlayerError } = await supabase
+        .from('players')
+        .update({
+          score: player.score + pointsEarned,
+          streak: newStreak
+        })
+        .eq('id', playerId)
 
-    if (updatePlayerError) throw updatePlayerError
+      if (updatePlayerError) throw updatePlayerError
+    }
 
     // --- NEW: Check if everyone has answered correctly to finish round early ---
     const { data: activePlayers } = await supabase

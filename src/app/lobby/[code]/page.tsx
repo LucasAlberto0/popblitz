@@ -23,7 +23,7 @@ function LobbyContent() {
   const [difficulty, setDifficulty] = useState("all");
   const [timePerRound, setTimePerRound] = useState(20);
   const [intervalTime, setIntervalTime] = useState(8);
-  const [includeAudio, setIncludeAudio] = useState(false);
+  const [includeAudio, setIncludeAudio] = useState(true);
   const [onlyAudio, setOnlyAudio] = useState(false);
 
   // Redirect when game starts

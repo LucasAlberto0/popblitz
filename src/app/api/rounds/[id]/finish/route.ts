@@ -35,6 +35,37 @@ export async function POST(
         .eq('id', roundId)
 
       if (updateRoundError) throw updateRoundError
+
+      // --- NEW: If boolean round, apply points to all players now ---
+      if (round.type === 'boolean') {
+        const { data: roundAnswers } = await supabase
+          .from('round_answers')
+          .select('player_id, points_earned, is_correct')
+          .eq('round_id', roundId)
+
+        if (roundAnswers && roundAnswers.length > 0) {
+          for (const answer of roundAnswers) {
+            // Get current player state to update streak correctly
+            const { data: p } = await supabase
+              .from('players')
+              .select('score, streak')
+              .eq('id', answer.player_id)
+              .single()
+
+            if (p) {
+              const newStreak = answer.is_correct ? (p.streak + 1) : 0
+              await supabase
+                .from('players')
+                .update({
+                  score: p.score + answer.points_earned,
+                  streak: newStreak
+                })
+                .eq('id', answer.player_id)
+            }
+          }
+        }
+      }
+      // -------------------------------------------------------------
     }
 
     const { data: answers } = await supabase

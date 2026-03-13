@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
         max_players: maxPlayers,
         total_rounds: totalRounds,
         time_per_round: timePerRound,
+        include_audio: true, // Audio rounds enabled by default
         status: 'waiting'
       })
       .select()

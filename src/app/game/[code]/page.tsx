@@ -90,8 +90,8 @@ function GameContent() {
       const myAnswers = answers.filter(a => a.player_id === playerData.id);
       const hasCorrect = myAnswers.some(a => a.is_correct);
       
-      setAnswered(hasCorrect);
-      if (hasCorrect) {
+      setAnswered(hasCorrect || myAnswers.length > 0);
+      if (hasCorrect && currentRound.type !== 'boolean') {
         setFeedback("correct");
       }
     }
@@ -103,7 +103,7 @@ function GameContent() {
       const newAnswers = answers.slice(lastAnswersCountRef.current);
       const hasNewCorrect = newAnswers.some(a => a.is_correct);
       
-      if (hasNewCorrect && !showRoundResult) {
+      if (hasNewCorrect && !showRoundResult && currentRound?.type !== 'boolean') {
         const audio = new Audio('/sounds/msn.mp3?v=2');
         audio.play().catch(() => {});
       }
@@ -166,6 +166,22 @@ function GameContent() {
 
             setRoundResult(data);
             setShowRoundResult(true);
+
+            // Special handle for boolean reveal
+            if (currentRound.type === 'boolean') {
+              const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+              const myAnswer = data.answers?.find((a: any) => a.player_id === playerData.id);
+              if (myAnswer) {
+                if (myAnswer.is_correct) {
+                  setFeedback("correct");
+                  // Play sound only for those who got it right in boolean rounds
+                  const audio = new Audio('/sounds/msn.mp3?v=2');
+                  audio.play().catch(() => {});
+                } else {
+                  setFeedback("wrong");
+                }
+              }
+            }
 
             if (isHost) {
               setTimeout(async () => {
@@ -245,18 +261,24 @@ function GameContent() {
       const data = await res.json();
 
       if (data.isCorrect) {
-        setFeedback("correct");
-        setScorePopup(data.pointsEarned);
-        setTimeout(() => setScorePopup(null), 800);
+        // Only show feedback and score popup for non-boolean rounds
+        if (currentRound.type !== 'boolean') {
+          setFeedback("correct");
+          setScorePopup(data.pointsEarned);
+          setTimeout(() => setScorePopup(null), 800);
+        }
         setAnswer(""); 
       } else {
-        setFeedback("wrong");
-        setAnswer(""); // Clear to allow immediate re-typing
-        setAnswered(false);
-        // Small delay to ensure React has updated the DOM before focusing
-        setTimeout(() => {
-          inputRef.current?.focus();
-        }, 50);
+        // Only show feedback for non-boolean rounds
+        if (currentRound.type !== 'boolean') {
+          setFeedback("wrong");
+          setAnswered(false);
+          // Small delay to ensure React has updated the DOM before focusing
+          setTimeout(() => {
+            inputRef.current?.focus();
+          }, 50);
+        }
+        setAnswer(""); // Always clear input
       }
     } catch (err) {
       setFeedback("wrong");
@@ -600,7 +622,7 @@ function GameContent() {
           )}
 
           <AnimatePresence>
-            {feedback && !showRoundResult && (
+            {feedback && !showRoundResult && currentRound.type !== 'boolean' && (
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -616,7 +638,14 @@ function GameContent() {
 
         <div className="w-full lg:w-80 flex flex-col gap-3 p-4 lg:p-6 lg:border-l border-border overflow-y-auto">
           <div className="flex-1 min-h-0">
-            <RankingList players={players} answers={answers} currentPlayerId={JSON.parse(sessionStorage.getItem("player") || "{}").id || ""} maxScore={room?.max_score || 120} />
+            <RankingList 
+              players={players} 
+              answers={answers} 
+              currentPlayerId={JSON.parse(sessionStorage.getItem("player") || "{}").id || ""} 
+              maxScore={room?.max_score || 120} 
+              roundStatus={currentRound?.status}
+              roundType={currentRound?.type}
+            />
           </div>
           <div className="flex-1 min-h-0">
             <ChatPanel roomCode={code} />

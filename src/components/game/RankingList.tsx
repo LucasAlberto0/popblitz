@@ -9,9 +9,11 @@ interface RankingListProps {
   currentPlayerId?: string;
   answers: RoundAnswer[];
   maxScore: number;
+  roundStatus?: string;
+  roundType?: string;
 }
 
-const RankingList = ({ players, currentPlayerId, answers, maxScore }: RankingListProps) => {
+const RankingList = ({ players, currentPlayerId, answers, maxScore, roundStatus, roundType }: RankingListProps) => {
   const sorted = [...players].sort((a, b) => b.score - a.score);
 
   return (
@@ -27,6 +29,13 @@ const RankingList = ({ players, currentPlayerId, answers, maxScore }: RankingLis
             const correctAnswer = playerAnswers.find(a => a.is_correct);
             const lastGuess = playerAnswers[playerAnswers.length - 1]?.answer;
             const isSpectator = player.status === 'ready';
+            const isCurrent = player.id === currentPlayerId;
+
+            // Special logic for boolean rounds: hide feedback until finished
+            const hideFeedback = roundType === 'boolean' && roundStatus !== 'finished';
+            const showCorrect = !hideFeedback && !!correctAnswer;
+            const showResponseTime = !hideFeedback && correctAnswer ? (correctAnswer.time_ms / 1000).toFixed(3) : undefined;
+            const showLastGuess = !hideFeedback && !correctAnswer && lastGuess ? lastGuess : undefined;
 
             return (
               <PlayerCard
@@ -35,9 +44,9 @@ const RankingList = ({ players, currentPlayerId, answers, maxScore }: RankingLis
                 avatar={player.avatar}
                 score={player.score}
                 rank={i + 1}
-                isCorrect={!!correctAnswer}
-                responseTime={correctAnswer ? (correctAnswer.time_ms / 1000).toFixed(3) : undefined}
-                lastGuess={!correctAnswer && lastGuess ? lastGuess : undefined}
+                isCorrect={showCorrect}
+                responseTime={showResponseTime}
+                lastGuess={showLastGuess}
                 isCurrentPlayer={player.id === currentPlayerId}
                 isSpectator={isSpectator}
               />
