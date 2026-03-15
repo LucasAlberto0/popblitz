@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import TimerRing from "@/components/game/TimerRing";
 import RankingList from "@/components/game/RankingList";
 import ChatPanel from "@/components/game/ChatPanel";
-import { Loader2, Settings, X, Crown, Info, Copy, Check } from "lucide-react";
+import { Loader2, Settings, X, Crown, Info, Copy, Check, Volume2, VolumeX } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 
 function GameContent() {
@@ -35,6 +35,18 @@ function GameContent() {
   const lastRaffledRoundRef = useRef<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  // Mobile Audio Reliability State
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const soundBankRef = useRef<{
+    correct: HTMLAudioElement | null;
+    wrong: HTMLAudioElement | null;
+    tick: HTMLAudioElement | null;
+  }>({
+    correct: null,
+    wrong: null,
+    tick: null
+  });
 
   // Use localStorage instead of sessionStorage for persistence
   const [playerData, setPlayerData] = useState<any>(null);
@@ -59,6 +71,54 @@ function GameContent() {
   const spectatorMode = currentPlayer?.status === 'ready';
   const isLuckyPlayer = currentRound?.lucky_player_id === playerData?.id;
   const isSurpriseRound = currentRound?.type === 'surprise';
+
+  // --- NEW: Audio Unlock & Pooling Logic ---
+  useEffect(() => {
+    // Prevent multiple initializations
+    if (soundBankRef.current.correct) return;
+
+    // Pre-instantiate sounds
+    const correct = new Audio('/sounds/msn.mp3?v=2');
+    // const wrong = new Audio('/sounds/wrong.mp3'); // Add if you have a wrong sound
+    
+    soundBankRef.current = {
+      correct,
+      wrong: null,
+      tick: null
+    };
+
+    // Attempt to auto-check if already unlocked (some browsers allow after interaction)
+    const checkAudio = () => {
+      if (correct.paused === false) {
+        setIsAudioEnabled(true);
+      }
+    };
+    
+    window.addEventListener('click', checkAudio, { once: true });
+    return () => window.removeEventListener('click', checkAudio);
+  }, []);
+
+  const unlockAudio = async () => {
+    const { correct } = soundBankRef.current;
+    if (!correct) return;
+
+    try {
+      // Play a tiny bit of the sound to "unlock" the audio context/interface
+      correct.volume = 0.01;
+      await correct.play();
+      correct.pause();
+      correct.currentTime = 0;
+      correct.volume = 0.5;
+      
+      setIsAudioEnabled(true);
+      // Small feedback
+      const audio = new Audio('/sounds/msn.mp3?v=2');
+      audio.volume = 0.2;
+      audio.play().catch(() => {});
+    } catch (err) {
+      console.warn("Audio unlock failed:", err);
+    }
+  };
 
   useEffect(() => {
     if (showRoundResult && (resultCountdown === null || resultCountdown === 0)) {
@@ -219,12 +279,19 @@ function GameContent() {
       const hasNewCorrect = newAnswers.some(a => a.is_correct);
       
       if (hasNewCorrect && !showRoundResult && currentRound?.type !== 'boolean') {
-        const audio = new Audio('/sounds/msn.mp3?v=2');
-        audio.play().catch(() => {});
+        const sound = soundBankRef.current.correct;
+        if (sound && isAudioEnabled) {
+          sound.currentTime = 0;
+          sound.play().catch(() => {
+            // Fallback if pooling fails
+            const audio = new Audio('/sounds/msn.mp3?v=2');
+            audio.play().catch(() => {});
+          });
+        }
       }
     }
     lastAnswersCountRef.current = answers.length;
-  }, [answers, showRoundResult]);
+  }, [answers, showRoundResult, isAudioEnabled]);
 
   useEffect(() => {
     if (room?.status === 'finished') {
@@ -306,8 +373,11 @@ function GameContent() {
                 if (myAnswer.is_correct) {
                   setFeedback("correct");
                   // Play sound only for those who got it right in boolean rounds
-                  const audio = new Audio('/sounds/msn.mp3?v=2');
-                  audio.play().catch(() => {});
+                  const sound = soundBankRef.current.correct;
+                  if (sound && isAudioEnabled) {
+                    sound.currentTime = 0;
+                    sound.play().catch(() => {});
+                  }
                 } else {
                   setFeedback("wrong");
                 }
@@ -443,7 +513,11 @@ function GameContent() {
       setTimeout(() => setScorePopup(null), 1000);
 
       // Correct sound for the thief
-      new Audio('/sounds/msn.mp3').play().catch(() => {});
+      const sound = soundBankRef.current.correct;
+      if (sound && isAudioEnabled) {
+        sound.currentTime = 0;
+        sound.play().catch(() => {});
+      }
     } catch (err) {
       console.error('Theft failed:', err);
     } finally {
@@ -476,10 +550,10 @@ function GameContent() {
   }
 
   return (
-    <div className="relative min-h-[100dvh] bg-background overflow-hidden flex flex-col">
+    <div className="relative h-[100dvh] bg-background overflow-hidden flex flex-col">
       {/* Hidden Asset Preloader */}
       {Preloader}
-      <div className="relative z-10 flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
+      <div className="relative z-10 flex-1 flex flex-col lg:flex-row min-h-0 h-full overflow-hidden">
         {/* Main Game Area */}
         <div className="flex-[2] lg:flex-1 flex flex-col p-3 lg:p-6 min-w-0 min-h-0 overflow-hidden">
           <div className="flex items-center justify-between mb-4">
@@ -491,7 +565,20 @@ function GameContent() {
                 ALVO: {room?.max_score || 120} PTS
               </span>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={unlockAudio}
+                className={`p-2 rounded-full border shadow-lg transition-all ${
+                  isAudioEnabled 
+                  ? "bg-neon-green/10 border-neon-green/30 text-neon-green" 
+                  : "bg-destructive/10 border-destructive/30 text-destructive animate-pulse"
+                }`}
+                title={isAudioEnabled ? "Áudio Ativado" : "Ativar Áudio"}
+              >
+                {isAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1, rotate: 90 }}
                 whileTap={{ scale: 0.9 }}
@@ -928,6 +1015,8 @@ function GameContent() {
                  disabled={isJoining}
                  onClick={async () => {
                     setIsJoining(true);
+                    // Also unlock audio here as it's a user interaction
+                    unlockAudio();
                     try {
                       await fetch(`/api/players/${currentPlayer.id}/participate`, {
                          method: 'POST',
@@ -1034,21 +1123,21 @@ function GameContent() {
         </div>
 
         {/* Sidebar: Ranking and Chat */}
-        <div className="flex-1 lg:flex-none lg:w-80 flex flex-col gap-3 p-3 lg:p-6 border-t lg:border-t-0 lg:border-l border-border bg-black/20 backdrop-blur-xl min-h-0 overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-            <RankingList 
-              players={players} 
-              answers={answers} 
-              currentPlayerId={playerData?.id || ""} 
-              maxScore={room?.max_score || 120} 
-              roundStatus={currentRound?.status}
-              roundType={currentRound?.type}
-            />
+          <div className="flex-1 lg:flex-none lg:w-80 flex flex-col gap-3 p-3 lg:p-6 border-t lg:border-t-0 lg:border-l border-border bg-black/20 backdrop-blur-xl min-h-0 h-1/3 lg:h-full overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+              <RankingList 
+                players={players} 
+                answers={answers} 
+                currentPlayerId={playerData?.id || ""} 
+                maxScore={room?.max_score || 120} 
+                roundStatus={currentRound?.status}
+                roundType={currentRound?.type}
+              />
+            </div>
+            <div className="flex-1 min-h-0 lg:block hidden">
+              <ChatPanel roomCode={code} />
+            </div>
           </div>
-          <div className="flex-1 min-h-0">
-            <ChatPanel roomCode={code} />
-          </div>
-        </div>
       </div>
     </div>
   );
