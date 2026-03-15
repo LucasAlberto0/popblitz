@@ -15,6 +15,7 @@ export function useRealtimeRoom(roomCode: string) {
   const [room, setRoom] = useState<Room | null>(null)
   const [players, setPlayers] = useState<Player[]>([])
   const [currentRound, setCurrentRound] = useState<Round | null>(null)
+  const [upcomingRounds, setUpcomingRounds] = useState<Round[]>([])
   const [answers, setAnswers] = useState<RoundAnswer[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -132,7 +133,24 @@ export function useRealtimeRoom(roomCode: string) {
     }
 
     fetchRoundData()
-  }, [room?.id, room?.current_round, currentRound?.round_number])
+
+    // --- NEW: Preload Next 5 Rounds ---
+    const fetchUpcomingRounds = async () => {
+      const { data: upcomingData } = await supabase
+        .from("rounds")
+        .select("*")
+        .eq("room_id", room.id)
+        .gte("round_number", room.current_round)
+        .lte("round_number", room.current_round + 5)
+        .order("round_number", { ascending: true })
+
+      if (upcomingData) {
+        setUpcomingRounds(upcomingData)
+      }
+    }
+
+    fetchUpcomingRounds()
+  }, [room?.id, room?.current_round, currentRound?.id])
 
   useEffect(() => {
     if (!currentRound) return
@@ -182,6 +200,7 @@ export function useRealtimeRoom(roomCode: string) {
     room,
     players,
     currentRound,
+    upcomingRounds,
     answers,
     isLoading,
   }

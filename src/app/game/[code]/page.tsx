@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense, useMemo } from "react";
+import React, { useState, useEffect, useRef, Suspense, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import TimerRing from "@/components/game/TimerRing";
@@ -13,7 +13,7 @@ function GameContent() {
   const router = useRouter();
   const params = useParams();
   const code = params.code as string;
-  const { room, players, currentRound, answers, isLoading: initialLoading } = useRealtimeRoom(code);
+  const { room, players, currentRound, upcomingRounds, answers, isLoading: initialLoading } = useRealtimeRoom(code);
   const [isHost, setIsHost] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
   const [answer, setAnswer] = useState("");
@@ -119,6 +119,47 @@ function GameContent() {
       }
     }
   }, [answers, players, currentRound, showRoundResult, playerData]);
+
+  // Preload Next Round assets 4 seconds before it begins
+  useEffect(() => {
+    if (showRoundResult && resultCountdown !== null && resultCountdown <= 4) {
+      const nextRoundData = upcomingRounds.find(r => r.round_number === (currentRound?.round_number || 0) + 1);
+      if (nextRoundData) {
+        if (nextRoundData.image_url) {
+          const img = new Image();
+          img.src = nextRoundData.image_url;
+        }
+        if (nextRoundData.audio_url) {
+          const audio = new Audio();
+          audio.src = nextRoundData.audio_url;
+          audio.load();
+        }
+      }
+    }
+  }, [showRoundResult, resultCountdown, upcomingRounds, currentRound?.round_number]);
+
+  // Hidden Preloader Component to force DOM-level caching
+  const Preloader = useMemo(() => {
+    return (
+      <div className="fixed -left-[9999px] -top-[9999px] w-1 h-1 overflow-hidden pointer-events-none" aria-hidden="true">
+        {upcomingRounds.map((round) => (
+          <React.Fragment key={`preload-${round.id}`}>
+            {round.image_url && (
+              <img 
+                src={round.image_url} 
+                alt="preload" 
+                loading="eager"
+                decoding="async"
+              />
+            )}
+            {round.audio_url && (
+              <audio src={round.audio_url} preload="auto" />
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+    );
+  }, [upcomingRounds]);
 
   // --- NEW: Raffle Animation Effect ---
   useEffect(() => {
@@ -436,6 +477,8 @@ function GameContent() {
 
   return (
     <div className="relative min-h-[100dvh] bg-background overflow-hidden flex flex-col">
+      {/* Hidden Asset Preloader */}
+      {Preloader}
       <div className="relative z-10 flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
         {/* Main Game Area */}
         <div className="flex-[2] lg:flex-1 flex flex-col p-3 lg:p-6 min-w-0 min-h-0 overflow-hidden">
