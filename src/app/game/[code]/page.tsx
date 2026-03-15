@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import TimerRing from "@/components/game/TimerRing";
 import RankingList from "@/components/game/RankingList";
 import ChatPanel from "@/components/game/ChatPanel";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings, X, Crown, Info, Copy, Check } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 
 function GameContent() {
@@ -30,10 +30,35 @@ function GameContent() {
   const lastAnswersCountRef = useRef<number>(0);
 
   const [isJoining, setIsJoining] = useState(false);
+  const [isRaffling, setIsRaffling] = useState(false);
+  const [rafflePlayerIndex, setRafflePlayerIndex] = useState(0);
+  const lastRaffledRoundRef = useRef<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const playerData = typeof window !== 'undefined' ? JSON.parse(sessionStorage.getItem("player") || "{}") : {};
-  const currentPlayer = players.find(p => p.id === playerData.id);
+  // Use localStorage instead of sessionStorage for persistence
+  const [playerData, setPlayerData] = useState<any>(null);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sessionData = sessionStorage.getItem("player");
+      if (sessionData) {
+        setPlayerData(JSON.parse(sessionData));
+      } else {
+        const localData = localStorage.getItem("player");
+        if (localData) {
+          const parsed = JSON.parse(localData);
+          setPlayerData(parsed);
+          sessionStorage.setItem("player", localData);
+        }
+      }
+    }
+  }, []);
+
+  const currentPlayer = useMemo(() => players.find(p => p.id === playerData?.id), [players, playerData]);
   const spectatorMode = currentPlayer?.status === 'ready';
+  const isLuckyPlayer = currentRound?.lucky_player_id === playerData?.id;
+  const isSurpriseRound = currentRound?.type === 'surprise';
 
   useEffect(() => {
     if (showRoundResult && (resultCountdown === null || resultCountdown === 0)) {
@@ -77,25 +102,74 @@ function GameContent() {
   }, [currentRound?.id, currentRound?.status, showRoundResult, preGameCountdown]);
 
   useEffect(() => {
-    if (room) {
-      const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+    if (room && playerData) {
       setIsHost(room.host_id === playerData.sessionId);
     }
-  }, [room]);
+  }, [room, playerData]);
 
   // --- NEW: Sync answered/feedback state on mount or when answers change (Fixes re-entry bug) ---
   useEffect(() => {
     if (players.length > 0 && answers.length > 0 && currentRound && !showRoundResult) {
-      const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
-      const myAnswers = answers.filter(a => a.player_id === playerData.id);
+      const myAnswers = answers.filter(a => a.player_id === playerData?.id);
       const hasCorrect = myAnswers.some(a => a.is_correct);
       
-      setAnswered(hasCorrect || myAnswers.length > 0);
+      setAnswered(hasCorrect || (currentRound.type === 'boolean' && myAnswers.length > 0));
       if (hasCorrect && currentRound.type !== 'boolean') {
         setFeedback("correct");
       }
     }
-  }, [answers, players, currentRound, showRoundResult]);
+  }, [answers, players, currentRound, showRoundResult, playerData]);
+
+  // --- NEW: Raffle Animation Effect ---
+  useEffect(() => {
+    // If not a surprise round or not active, ensure we're not "raffling"
+    if (!isSurpriseRound || currentRound?.status !== 'active' || showRoundResult) {
+      setIsRaffling(false);
+      return;
+    }
+
+    // If we already started raffling this round, don't start it again
+    if (lastRaffledRoundRef.current === currentRound.id) {
+      return;
+    }
+
+    // Start raffle
+    setIsRaffling(true);
+    lastRaffledRoundRef.current = currentRound.id;
+    
+    let count = 0;
+    const totalSteps = 25; 
+    
+    // Capture players at start to avoid dependency issues
+    const currentPlayers = [...players];
+    const luckyId = currentRound.lucky_player_id;
+
+    const interval = setInterval(() => {
+      if (currentPlayers.length > 0) {
+        const randomIndex = Math.floor(Math.random() * currentPlayers.length);
+        setRafflePlayerIndex(randomIndex);
+      }
+      count++;
+      
+      if (count >= totalSteps) {
+        clearInterval(interval);
+        
+        // Land firmly on the actual lucky player
+        const actualLuckyIndex = currentPlayers.findIndex(p => p.id === luckyId);
+        if (actualLuckyIndex !== -1) {
+          setRafflePlayerIndex(actualLuckyIndex);
+        }
+
+        setTimeout(() => {
+          setIsRaffling(false);
+        }, 1500);
+      }
+    }, 100); 
+
+    return () => {
+      clearInterval(interval);
+    }
+  }, [isSurpriseRound, currentRound?.id, currentRound?.status, showRoundResult]);
 
   // --- NEW: Play sound for EVERYONE when ANYONE gets it right ---
   useEffect(() => {
@@ -132,8 +206,21 @@ function GameContent() {
           elapsedSeconds -= 7;
         }
 
-        const limit = room?.time_per_round || 20;
+        const limit = currentRound.type === 'surprise' ? 50 : (room?.time_per_round || 30);
+        
+        // --- NEW: Handle Raffle Pause ---
+        if (isSurpriseRound && isRaffling) {
+          setTimeLeft(limit);
+          return;
+        }
 
+        // Subtract raffle duration (approx 4.5s: 2.5s steps + 1.5s delay + 0.5s safety) 
+        // to prevent jump when raffle ends
+        if (isSurpriseRound && !isRaffling) {
+          elapsedSeconds -= 4; 
+        }
+        // -------------------------------
+        
         if (elapsedSeconds < 0) {
           setTimeLeft(limit);
           return;
@@ -150,7 +237,7 @@ function GameContent() {
     }, 500);
 
     return () => clearInterval(timer);
-  }, [currentRound, room?.time_per_round, showRoundResult]);
+  }, [currentRound, room?.time_per_round, showRoundResult, isRaffling]);
 
   useEffect(() => {
     if (currentRound) {
@@ -160,7 +247,7 @@ function GameContent() {
             const res = await fetch(`/api/rounds/${currentRound.id}/finish`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sessionId: JSON.parse(sessionStorage.getItem("player") || "{}").sessionId }),
+              body: JSON.stringify({ sessionId: playerData?.sessionId }),
             });
             const data = await res.json();
 
@@ -169,9 +256,12 @@ function GameContent() {
 
             // Special handle for boolean reveal
             if (currentRound.type === 'boolean') {
-              const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
-              const myAnswer = data.answers?.find((a: any) => a.player_id === playerData.id);
+              const myAnswer = data.answers?.find((a: any) => a.player_id === playerData?.id);
               if (myAnswer) {
+                // Show score popup for boolean rounds
+                setScorePopup(myAnswer.points_earned);
+                setTimeout(() => setScorePopup(null), 1500);
+
                 if (myAnswer.is_correct) {
                   setFeedback("correct");
                   // Play sound only for those who got it right in boolean rounds
@@ -185,11 +275,10 @@ function GameContent() {
 
             if (isHost) {
               setTimeout(async () => {
-                const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
                 await fetch(`/api/rounds/${currentRound.id}/next`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ sessionId: playerData.sessionId }),
+                  body: JSON.stringify({ sessionId: playerData?.sessionId }),
                 });
               }, (room?.interval_time || 8) * 1000);
             }
@@ -210,19 +299,18 @@ function GameContent() {
         setShowRoundResult(false);
         setRoundResult(null);
         startTimeRef.current = Date.now();
-        audioPlayedRef.current = false;
+      audioPlayedRef.current = false;
       }
     }
-  }, [currentRound, isHost, room?.time_per_round, showRoundResult, roundResult?.round?.id]);
+  }, [currentRound, isHost, room?.time_per_round, showRoundResult, roundResult?.round?.id, playerData]);
 
 
   const handleTimeUp = async () => {
     if (isHost && currentRound && !showRoundResult) {
-      const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
       await fetch(`/api/rounds/${currentRound.id}/finish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: playerData.sessionId }),
+        body: JSON.stringify({ sessionId: playerData?.sessionId }),
       });
     }
     // Non-hosts just wait for the Realtime 'finished' event
@@ -233,7 +321,7 @@ function GameContent() {
     setAnswered(true);
     setFeedback(null);
 
-    const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+    // const playerData = JSON.parse(sessionStorage.getItem("player") || "{}"); // Removed: Use playerData state directly
 
     // Calculate time offset for first round
     let startTimeRound = new Date(currentRound.started_at!).getTime();
@@ -251,8 +339,8 @@ function GameContent() {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          playerId: playerData.id,
-          playerSessionId: playerData.sessionId,
+          playerId: playerData?.id,
+          playerSessionId: playerData?.sessionId,
           answer: currentAnswer,
           timeMs,
         }),
@@ -292,6 +380,36 @@ function GameContent() {
     }
   };
 
+  const handleSteal = async (victimId: string) => {
+    if (!currentRound || !isLuckyPlayer || isJoining) return;
+    
+    setIsJoining(true); // Reuse isJoining for steal loading state
+    const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+    
+    try {
+      await fetch(`/api/rounds/${currentRound.id}/steal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          thiefId: playerData.id,
+          victimId,
+          sessionId: playerData.sessionId
+        }),
+      });
+
+      // Show +10 popup
+      setScorePopup(10);
+      setTimeout(() => setScorePopup(null), 1000);
+
+      // Correct sound for the thief
+      new Audio('/sounds/msn.mp3').play().catch(() => {});
+    } catch (err) {
+      console.error('Theft failed:', err);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
   // Removed local correct audio effect in favor of the global one above
 
   if (initialLoading) {
@@ -317,9 +435,10 @@ function GameContent() {
   }
 
   return (
-    <div className="relative min-h-screen gradient-bg-animated">
-      <div className="relative z-10 h-screen flex flex-col lg:flex-row">
-        <div className="flex-1 flex flex-col p-4 lg:p-6 min-w-0">
+    <div className="relative min-h-[100dvh] bg-background overflow-hidden flex flex-col">
+      <div className="relative z-10 flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
+        {/* Main Game Area */}
+        <div className="flex-[2] lg:flex-1 flex flex-col p-3 lg:p-6 min-w-0 min-h-0 overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="flex flex-col">
               <span className="font-display text-[10px] text-primary/70 tracking-widest uppercase">
@@ -329,8 +448,126 @@ function GameContent() {
                 ALVO: {room?.max_score || 120} PTS
               </span>
             </div>
-            <TimerRing timeLeft={timeLeft} totalTime={room?.time_per_round || 30} />
+            <div className="flex items-center gap-4">
+              <motion.button
+                whileHover={{ scale: 1.1, rotate: 90 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setShowSettings(true)}
+                className="p-2 rounded-full bg-white/5 border border-white/10 text-muted-foreground hover:text-primary transition-colors shadow-lg"
+                title="Configurações da Sala"
+              >
+                <Settings size={18} />
+              </motion.button>
+              <TimerRing timeLeft={timeLeft} totalTime={room?.time_per_round || 30} />
+            </div>
           </div>
+
+          <AnimatePresence>
+            {showSettings && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
+                onClick={() => setShowSettings(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, y: 20 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.9, y: 20 }}
+                  className="glass-card w-full max-w-sm overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between p-6 border-b border-white/10">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-primary/20 text-primary">
+                        <Info size={18} />
+                      </div>
+                      <h3 className="font-display text-lg text-white">Informações da Sala</h3>
+                    </div>
+                    <button 
+                      onClick={() => setShowSettings(false)}
+                      className="p-2 rounded-full hover:bg-white/10 text-muted-foreground transition-colors"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-6">
+                    {/* Room Code */}
+                    <div className="space-y-2 text-center">
+                      <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-display">Código da Sala</span>
+                      <div className="flex items-center justify-center gap-3">
+                        <span className="text-3xl font-black text-primary tracking-[0.2em]">{code}</span>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(code);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }}
+                          className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                        >
+                          {copied ? <Check size={16} className="text-neon-green" /> : <Copy size={16} className="text-muted-foreground" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Config Grid */}
+                    <div className="grid grid-cols-2 gap-4 pt-4">
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-display text-muted-foreground">Alvo</span>
+                        <p className="text-sm font-bold text-white">{room?.max_score || 120} PTS</p>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-display text-muted-foreground">Tempo</span>
+                        <p className="text-sm font-bold text-white">{room?.time_per_round || 20}s / rodada</p>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-display text-muted-foreground">Dificuldade</span>
+                        <p className="text-sm font-bold text-white">
+                          {room?.difficulty === 'very_easy' ? 'M. Fácil' : 
+                           room?.difficulty === 'easy' ? 'Fácil' : 
+                           room?.difficulty === 'medium' ? 'Média' : 
+                           room?.difficulty === 'hard' ? 'Difícil' : 
+                           room?.difficulty === 'impossible' ? 'Impossível' : 'Todas'}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-display text-muted-foreground">Modos</span>
+                        <div className="flex gap-1">
+                           {room?.include_audio && <span title="Áudio" className="text-xs">🎵</span>}
+                           {room?.include_surprise && <span title="Roubo" className="text-xs">🦹</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Host Info */}
+                    <div className="pt-4 border-t border-white/10">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <span className="text-[10px] uppercase font-display text-muted-foreground">Anfitrião</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{players.find(p => p.is_host)?.avatar}</span>
+                            <p className="text-sm font-bold text-neon-yellow">{players.find(p => p.is_host)?.name || "Desconhecido"}</p>
+                          </div>
+                        </div>
+                        <Crown size={20} className="text-neon-yellow/40" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white/5 flex justify-center">
+                    <button 
+                      onClick={() => setShowSettings(false)}
+                      className="text-xs font-display text-primary uppercase tracking-widest hover:text-white transition-colors"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="flex-1 flex items-center justify-center relative">
             <AnimatePresence mode="wait">
@@ -371,12 +608,12 @@ function GameContent() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 1.05 }}
-                  className={`glass-card p-2 max-w-lg w-full flex flex-col gap-4 transition-all duration-700 ${preGameCountdown !== null ? "blur-md brightness-50 grayscale select-none" : ""
+                  className={`glass-card p-2 sm:p-4 max-w-lg w-full flex flex-col gap-3 transition-all duration-700 max-h-full overflow-y-auto custom-scrollbar ${preGameCountdown !== null ? "blur-md brightness-50 grayscale select-none" : ""
                     }`}
                 >
                   {(currentRound as any).question && (
-                    <div className={`px-4 py-6 bg-primary/10 rounded-lg border border-primary/20 relative ${!currentRound.image_url ? "min-h-[16rem] flex items-center justify-center" : ""}`}>
-                      <p className={`font-display text-primary text-center ${!currentRound.image_url ? "text-xl sm:text-3xl font-bold" : "text-sm sm:text-base"}`}>
+                    <div className={`px-4 ${isSurpriseRound ? "py-3 bg-secondary/10 border-secondary/20" : "py-6 bg-primary/10 border-primary/20"} rounded-lg border relative ${!currentRound.image_url && !isSurpriseRound ? "min-h-[16rem] flex items-center justify-center" : ""}`}>
+                      <p className={`font-display ${isSurpriseRound ? "text-secondary text-base" : "text-primary"} text-center ${!currentRound.image_url && !isSurpriseRound ? "text-xl sm:text-3xl font-bold" : "text-sm sm:text-base"} font-bold`}>
                         {(currentRound as any).question}
                       </p>
                       
@@ -463,6 +700,110 @@ function GameContent() {
                       )}
                     </div>
                   )}
+
+                  {isSurpriseRound && (
+                    <div className="flex flex-col items-center gap-4 py-4 relative overflow-hidden">
+                       {/* Emoji rain removed as per user request */}
+
+                       {isRaffling ? (
+                          <div className="flex flex-col items-center gap-8 z-10 w-full">
+                             <motion.div 
+                                animate={{ 
+                                  rotate: [0, 360],
+                                  scale: [1, 1.1, 1]
+                                }}
+                                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                className="w-32 h-32 rounded-full border-4 border-dashed border-neon-magenta flex items-center justify-center bg-white/5 backdrop-blur-md"
+                             >
+                                <span className="text-5xl">🎯</span>
+                             </motion.div>
+                             
+                             <div className="text-center space-y-4">
+                                <h3 className="text-2xl font-black text-white uppercase tracking-[0.3em] animate-pulse">Sorteando...</h3>
+                                
+                                <div className="h-24 flex items-center justify-center">
+                                   <AnimatePresence mode="wait">
+                                      <motion.div
+                                         key={players[rafflePlayerIndex]?.id}
+                                         initial={{ y: 20, opacity: 0, scale: 0.5 }}
+                                         animate={{ y: 0, opacity: 1, scale: 1.2 }}
+                                         exit={{ y: -20, opacity: 0, scale: 0.5 }}
+                                         className="flex flex-col items-center"
+                                      >
+                                         <span className="text-4xl mb-2">{players[rafflePlayerIndex]?.avatar}</span>
+                                         <span className="font-display text-xl text-primary font-bold">{players[rafflePlayerIndex]?.name}</span>
+                                      </motion.div>
+                                   </AnimatePresence>
+                                </div>
+                             </div>
+                          </div>
+                       ) : (
+                          <>
+                             <motion.div 
+                                animate={{ 
+                                   scale: [1, 1.1, 1]
+                                }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                                className="w-24 h-24 bg-gradient-to-br from-neon-magenta to-neon-purple rounded-full flex items-center justify-center border-4 border-white/20 shadow-[0_0_50px_rgba(255,0,255,0.6)] z-10"
+                             >
+                                <span className="text-5xl drop-shadow-lg">🦹</span>
+                             </motion.div>
+
+                             <motion.div 
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="text-center space-y-2 z-10"
+                             >
+                                <h2 className="text-3xl font-black gradient-text uppercase tracking-widest drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">Rodada de Roubo!</h2>
+                                <div className="bg-background/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-xs font-bold text-neon-magenta animate-pulse uppercase tracking-[0.2em]">
+                                   Duração Especial: 50 Segundos
+                                </div>
+                                <p className="text-muted-foreground text-sm max-w-xs mx-auto mt-4 px-6 italic font-medium">
+                                   {isLuckyPlayer 
+                                     ? "O destino te escolheu! Clique em alguém para confiscar 10 pontos (mesmo que ele fique devendo!)" 
+                                     : `O sortudo(a) da vez é ${players.find(p => p.id === currentRound.lucky_player_id)?.name || "alguém"}! Fique de olho!`}
+                                </p>
+                             </motion.div>
+
+                             {isLuckyPlayer && (
+                                <motion.div 
+                                   initial={{ y: 50, opacity: 0 }}
+                                   animate={{ y: 0, opacity: 1 }}
+                                   transition={{ delay: 0.5 }}
+                                   className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-lg mt-2 z-10 px-3 py-6 max-h-[350px] overflow-y-auto custom-scrollbar"
+                                >
+                                   {players.filter(p => p.id !== playerData.id).map(p => (
+                                      <motion.button
+                                         key={p.id}
+                                         whileHover={{ 
+                                            scale: 1.05, 
+                                            borderColor: "var(--neon-magenta)",
+                                            boxShadow: "0 0 25px rgba(255, 0, 255, 0.5)",
+                                            zIndex: 50
+                                         }}
+                                         whileTap={{ scale: 0.95 }}
+                                         disabled={isJoining}
+                                         onClick={() => handleSteal(p.id)}
+                                         className="glass-card bg-background/20 backdrop-blur-xl border-white/10 p-4 flex flex-col items-center gap-2 transition-all group relative"
+                                      >
+                                         <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity }}>🔪</motion.span>
+                                         </div>
+                                         <span className="text-3xl filter drop-shadow-md">{p.avatar}</span>
+                                         <span className="text-sm font-black truncate w-full text-center tracking-tight">{p.name}</span>
+                                         <div className="flex items-center gap-1">
+                                            <span className={`text-[11px] font-bold ${p.score < 0 ? "text-destructive" : "text-neon-cyan"}`}>
+                                               {p.score} pts
+                                            </span>
+                                         </div>
+                                      </motion.button>
+                                   ))}
+                                </motion.div>
+                             )}
+                          </>
+                       )}
+                    </div>
+                  )}
                 </motion.div>
               ) : (
                 <motion.div
@@ -471,18 +812,32 @@ function GameContent() {
                   animate={{ opacity: 1, y: 0 }}
                   className="glass-card p-8 text-center max-w-md w-full"
                 >
-                  <h3 className="font-display text-lg text-primary mb-2">Resposta Correta</h3>
-                  <p className="font-display text-3xl gradient-text mb-4">{currentRound.answer}</p>
+                  <h3 className="font-display text-lg text-primary mb-2">
+                    {currentRound.type === 'surprise' ? 'Fim do Roubo!' : 'Resposta Correta'}
+                  </h3>
+                  <p className="font-display text-3xl gradient-text mb-4">
+                    {currentRound.type === 'surprise' ? '💰💸' : currentRound.answer}
+                  </p>
                   {roundResult && roundResult.answers && (
-                    <div className="mb-4">
-                      <p className="text-sm text-muted-foreground font-ui mb-2">Acertos:</p>
+                    <div className="mb-4 max-h-[200px] overflow-y-auto custom-scrollbar px-2">
+                      <p className="text-sm text-muted-foreground font-ui mb-2 sticky top-0 bg-background/80 backdrop-blur-sm py-1">
+                        {currentRound.type === 'surprise' ? 'Ação:' : 'Acertos:'}
+                      </p>
                       <div className="flex flex-wrap gap-2 justify-center">
                         {roundResult.answers
                           .filter((a: any) => a.is_correct)
                           .map((a: any) => (
-                            <span key={a.id} className="text-xs bg-neon-green/20 text-neon-green px-2 py-1 rounded">
-                              {a.player?.name || "Jogador"}
-                            </span>
+                            <div key={a.id} className="flex flex-col items-center">
+                              {currentRound.type === 'surprise' ? (
+                                <span className="text-sm font-bold text-neon-magenta bg-neon-magenta/10 px-4 py-2 rounded-lg border border-neon-magenta/30 flex items-center gap-2">
+                                  <span className="text-lg">🦹</span> {a.player?.name} {a.answer}
+                                </span>
+                              ) : (
+                                <span className="text-xs bg-neon-green/20 text-neon-green px-2 py-1 rounded">
+                                  {a.player?.name || "Jogador"}
+                                </span>
+                              )}
+                            </div>
                           ))}
                       </div>
                     </div>
@@ -531,11 +886,10 @@ function GameContent() {
                  onClick={async () => {
                     setIsJoining(true);
                     try {
-                      const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
                       await fetch(`/api/players/${currentPlayer.id}/participate`, {
                          method: 'POST',
                          headers: { "Content-Type": "application/json" },
-                         body: JSON.stringify({ sessionId: playerData.sessionId })
+                         body: JSON.stringify({ sessionId: playerData?.sessionId })
                       });
                     } finally {
                       setIsJoining(false);
@@ -551,12 +905,12 @@ function GameContent() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 mt-6 justify-center w-full"
+              className="flex gap-6 mt-6 justify-center w-full"
             >
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                disabled={answered}
+                disabled={answered || preGameCountdown !== null}
                 onClick={() => {
                   setAnswer("Verdadeiro");
                   submitAnswer("Verdadeiro");
@@ -565,14 +919,14 @@ function GameContent() {
                   answered && answer === "Verdadeiro" 
                   ? "bg-neon-green text-black scale-95 shadow-neon-green/40" 
                   : "bg-background/10 border-2 border-neon-green text-neon-green hover:bg-neon-green/10"
-                } disabled:opacity-50`}
+                } disabled:opacity-50 disabled:pointer-events-none`}
               >
                 Verdadeiro
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                disabled={answered}
+                disabled={answered || preGameCountdown !== null}
                 onClick={() => {
                   setAnswer("Falso");
                   submitAnswer("Falso");
@@ -581,12 +935,12 @@ function GameContent() {
                   answered && answer === "Falso" 
                   ? "bg-destructive text-black scale-95 shadow-destructive/40" 
                   : "bg-background/10 border-2 border-destructive text-destructive hover:bg-destructive/10"
-                } disabled:opacity-50`}
+                } disabled:opacity-50 disabled:pointer-events-none`}
               >
                 Falso
               </motion.button>
             </motion.div>
-          ) : !showRoundResult && (
+          ) : !showRoundResult && !isSurpriseRound && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -601,20 +955,20 @@ function GameContent() {
                 }}
                 onKeyDown={(e) => e.key === "Enter" && submitAnswer()}
                 placeholder="Sua resposta..."
-                disabled={feedback === "correct" || showRoundResult}
+                disabled={feedback === "correct" || showRoundResult || preGameCountdown !== null}
                 className={`flex-1 bg-input border rounded-xl px-4 py-3 font-body text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${feedback === "correct"
                   ? "border-neon-green neon-border-cyan"
                   : feedback === "wrong"
                     ? "border-destructive shake-wrong"
                     : "border-border focus:neon-border-cyan"
-                  } disabled:opacity-50`}
+                  } disabled:opacity-50 disabled:pointer-events-none`}
               />
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => submitAnswer()}
-                disabled={answered || !answer.trim() || feedback === "correct"}
-                className="btn-neon px-6 py-3 rounded-xl text-primary-foreground font-display text-xs tracking-widest disabled:opacity-40"
+                disabled={answered || !answer.trim() || feedback === "correct" || preGameCountdown !== null}
+                className="btn-neon px-6 py-3 rounded-xl text-primary-foreground font-display text-xs tracking-widest disabled:opacity-40 disabled:pointer-events-none"
               >
                 Enviar
               </motion.button>
@@ -636,12 +990,13 @@ function GameContent() {
           </AnimatePresence>
         </div>
 
-        <div className="w-full lg:w-80 flex flex-col gap-3 p-4 lg:p-6 lg:border-l border-border overflow-y-auto">
-          <div className="flex-1 min-h-0">
+        {/* Sidebar: Ranking and Chat */}
+        <div className="flex-1 lg:flex-none lg:w-80 flex flex-col gap-3 p-3 lg:p-6 border-t lg:border-t-0 lg:border-l border-border bg-black/20 backdrop-blur-xl min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             <RankingList 
               players={players} 
               answers={answers} 
-              currentPlayerId={JSON.parse(sessionStorage.getItem("player") || "{}").id || ""} 
+              currentPlayerId={playerData?.id || ""} 
               maxScore={room?.max_score || 120} 
               roundStatus={currentRound?.status}
               roundType={currentRound?.type}

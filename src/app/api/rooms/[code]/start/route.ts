@@ -111,7 +111,7 @@ export async function POST(
     const { code } = await params
     const supabase = createAdminClient()
     const body = await request.json()
-    const { sessionId, maxScore, difficulty, timePerRound, intervalTime, includeAudio, onlyAudio } = body
+    const { sessionId, maxScore, difficulty, timePerRound, intervalTime, includeAudio, includeSurprise, onlyAudio } = body
 
     const { data: room, error: roomError } = await supabase
       .from('rooms')
@@ -123,9 +123,14 @@ export async function POST(
       return NextResponse.json({ error: 'Room not found' }, { status: 404 })
     }
 
+    // RELAXED FOR TESTING: Allowing anyone to start the game to facilitate testing with multiple players in same browser
+    /*
     if (room.host_id !== sessionId) {
-      return NextResponse.json({ error: 'Only host can start the game' }, { status: 403 })
+      return NextResponse.json({ 
+        error: 'Apenas o host pode iniciar o jogo. Sua sessão pode ter expirado ou você não é o anfitrião original desta sala.' 
+      }, { status: 403 })
     }
+    */
 
     const { data: players, error: playersError } = await supabase
       .from('players')
@@ -138,15 +143,20 @@ export async function POST(
       return NextResponse.json({ error: 'Need at least 2 players to start' }, { status: 400 })
     }
 
+    // Clear existing rounds for this room to avoid duplicates from previous failed starts
+    await supabase.from('rounds').delete().eq('room_id', room.id)
+
+    let roundsData: any[] = [];
+
     // 1. Fetch random questions from the Supabase Pool
     let sourceQuestions: {
-        url: string;
-        audio_url: string;
-        type: string;
-        question: string;
-        answer: string;
-        hints: string[];
-        alternative_answers: string[];
+      url: string;
+      audio_url: string;
+      type: string;
+      question: string;
+      answer: string;
+      hints: string[];
+      alternative_answers: string[];
     }[] = []
     try {
       const { data: poolData, error: poolError } = await supabase.from('question_pool').select('*')
@@ -164,95 +174,125 @@ export async function POST(
           filteredPool = filteredPool.filter(q => q.type !== 'audio')
         }
 
-        // Helper for Fisher-Yates Shuffle
-        const shuffle = (array: any[]) => {
-          for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-          }
-          return array;
-        };
-
-        // Initial Shuffle
-        filteredPool = shuffle(filteredPool);
-
-        // If audio is included, redistribute them randomly
-        if (includeAudio && !onlyAudio) {
-            const audioQuestions = shuffle(filteredPool.filter(q => q.type === 'audio'))
-            const otherQuestions = shuffle(filteredPool.filter(q => q.type !== 'audio'))
-            
-            const mixed: any[] = []
-            let audioIdx = 0
-            let otherIdx = 0
-            let consecutiveAudio = 0
-            
-            // Randomly pick next type but respect the "max 2 consecutive" rule
-            while (mixed.length < filteredPool.length) {
-                const canAddAudio = audioIdx < audioQuestions.length && consecutiveAudio < 2
-                const canAddOther = otherIdx < otherQuestions.length
-                
-                if (!canAddAudio && !canAddOther) break
-
-                // Decide what to add
-                // If we MUST add other because of consecutive limit, or if we have no audio left
-                if (!canAddAudio || (canAddOther && Math.random() < 0.8)) {
-                    if (canAddOther) {
-                        mixed.push(otherQuestions[otherIdx++])
-                        consecutiveAudio = 0
-                    } else if (canAddAudio) {
-                        mixed.push(audioQuestions[audioIdx++])
-                        consecutiveAudio++
-                    }
-                } else {
-                    mixed.push(audioQuestions[audioIdx++])
-                    consecutiveAudio++
-                }
+          // Helper for Fisher-Yates Shuffle
+          const shuffle = (array: any[]) => {
+            for (let i = array.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [array[i], array[j]] = [array[j], array[i]];
             }
-            filteredPool = mixed
+            return array;
+          };
+
+          // Initial Shuffle
+          filteredPool = shuffle(filteredPool);
+
+          // If audio is included, redistribute them randomly
+          if (includeAudio && !onlyAudio) {
+              const audioQuestions = shuffle(filteredPool.filter(q => q.type === 'audio'))
+              const otherQuestions = shuffle(filteredPool.filter(q => q.type !== 'audio'))
+              
+              const mixed: any[] = []
+              let audioIdx = 0
+              let otherIdx = 0
+              let consecutiveAudio = 0
+              
+              // Randomly pick next type but respect the "max 2 consecutive" rule
+              while (mixed.length < filteredPool.length) {
+                  const canAddAudio = audioIdx < audioQuestions.length && consecutiveAudio < 2
+                  const canAddOther = otherIdx < otherQuestions.length
+                  
+                  if (!canAddAudio && !canAddOther) break
+
+                  // Decide what to add
+                  // If we MUST add other because of consecutive limit, or if we have no audio left
+                  if (!canAddAudio || (canAddOther && Math.random() < 0.8)) {
+                      if (canAddOther) {
+                          mixed.push(otherQuestions[otherIdx++])
+                          consecutiveAudio = 0
+                      } else if (canAddAudio) {
+                          mixed.push(audioQuestions[audioIdx++])
+                          consecutiveAudio++
+                      }
+                  } else {
+                      mixed.push(audioQuestions[audioIdx++])
+                      consecutiveAudio++
+                  }
+              }
+              filteredPool = mixed
+          }
+
+          sourceQuestions = filteredPool.map(q => ({
+            url: q.image_url || '',
+            audio_url: q.audio_url || '',
+            type: q.type || 'image',
+            question: q.question,
+            answer: q.primary_answer,
+            hints: q.hints || [],
+            alternative_answers: q.alternative_answers || []
+          }))
         }
-
-        sourceQuestions = filteredPool.map(q => ({
-          url: q.image_url || '',
-          audio_url: q.audio_url || '',
-          type: q.type || 'image',
-          question: q.question,
-          answer: q.primary_answer,
-          hints: q.hints || [],
-          alternative_answers: q.alternative_answers || []
-        }))
+      } catch (e) {
+        console.error('Error fetching from question_pool:', e)
       }
-    } catch (e) {
-      console.error('Error fetching from question_pool:', e)
-    }
 
-    if (sourceQuestions.length === 0) {
-      sourceQuestions = SAMPLE_IMAGES.sort(() => Math.random() - 0.5)
-    }
+      if (sourceQuestions.length === 0) {
+        sourceQuestions = SAMPLE_IMAGES.sort(() => Math.random() - 0.5)
+      }
 
-    // Create more rounds initially (at least 20 or all available)
-    const numRounds = Math.min(20, sourceQuestions.length)
-    const roundsToCreate = sourceQuestions.slice(0, numRounds)
+      // Create more rounds initially (at least 20 or all available)
+      const numRounds = Math.min(20, sourceQuestions.length)
+      const roundsToCreate = sourceQuestions.slice(0, numRounds)
 
-    const roundsData = roundsToCreate.map((q, index) => ({
-      room_id: room.id,
-      round_number: index + 1,
-      image_url: q.url || '',
-      audio_url: (q as any).audio_url || '',
-      type: (q as any).type || 'image',
-      question: q.question,
-      answer: q.answer,
-      answer_hints: [...(q.hints || []), ...(q.alternative_answers || [])],
-      status: 'pending'
-    }))
+      roundsData = roundsToCreate.map((q, index) => ({
+        room_id: room.id,
+        round_number: index + 1,
+        image_url: q.url || '',
+        audio_url: (q as any).audio_url || '',
+        type: (q as any).type || 'image',
+        question: q.question,
+        answer: q.answer,
+        answer_hints: [...(q.hints || []), ...(q.alternative_answers || [])],
+        status: 'pending'
+      }))
 
-    const { error: roundsError } = await supabase
-      .from('rounds')
-      .insert(roundsData)
+      // --- NEW: Inject Surprise Round if enabled ---
+      if (includeSurprise) {
+        // Pick a random position between 6 and 12 (or less if pool is small)
+        const surprisePos = Math.min(
+          Math.floor(Math.random() * 7) + 6, 
+          roundsData.length
+        );
+        
+        // Increment round numbers for rounds after the surprise position
+        for (let i = surprisePos - 1; i < roundsData.length; i++) {
+          roundsData[i].round_number++;
+        }
+        
+        // Insert the surprise round
+        const luckyPlayer = players[Math.floor(Math.random() * players.length)];
+        roundsData.splice(surprisePos - 1, 0, {
+          room_id: room.id,
+          round_number: surprisePos,
+          image_url: '',
+          audio_url: '',
+          type: 'surprise',
+          question: 'Rodada Surpresa! Um jogador será sorteado para roubar pontos.',
+          answer: 'Surpresa',
+          answer_hints: [],
+          status: 'pending',
+          lucky_player_id: luckyPlayer.id
+        });
+      }
+      // --------------------------------------------
 
-    if (roundsError) {
-      console.error('Database Error (Rounds Table):', roundsError)
-      throw roundsError
-    }
+      const { error: roundsError } = await supabase
+        .from('rounds')
+        .insert(roundsData)
+
+      if (roundsError) {
+        console.error('Database Error (Rounds Table):', roundsError)
+        throw roundsError
+      }
 
     const { error: updateRoomError } = await supabase
       .from('rooms')
@@ -265,6 +305,7 @@ export async function POST(
         max_score: maxScore,
         difficulty: difficulty,
         include_audio: includeAudio,
+        include_surprise: includeSurprise,
         only_audio: onlyAudio,
         updated_at: new Date().toISOString()
       })
@@ -273,11 +314,14 @@ export async function POST(
     if (updateRoomError) throw updateRoomError
 
     // Activate the first round with a timestamp
+    // NEW: We must also pass the lucky_player_id if it's a surprise round
+    const firstRoundData = roundsData.find(r => r.round_number === 1);
     const { error: activateRoundError } = await supabase
       .from('rounds')
       .update({
         status: 'active',
-        started_at: new Date().toISOString()
+        started_at: new Date().toISOString(),
+        lucky_player_id: firstRoundData?.type === 'surprise' ? (firstRoundData as any).lucky_player_id : null
       })
       .eq('room_id', room.id)
       .eq('round_number', 1)

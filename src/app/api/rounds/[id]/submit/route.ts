@@ -111,7 +111,9 @@ export async function POST(
         }
       } else {
         // Standard Rules: ...
-        if (position <= 2 && timeSec <= 4) {
+        if (position === 1 && timeSec <= 10) {
+          pointsEarned = 10
+        } else if (position === 2 && timeSec <= 4) {
           pointsEarned = 10
         } else if (timeSec <= 10) {
           pointsEarned = Math.max(7, Math.round(9 - (2 * (timeSec / 10))))
@@ -160,26 +162,46 @@ export async function POST(
       if (updatePlayerError) throw updatePlayerError
     }
 
-    // --- NEW: Check if everyone has answered correctly to finish round early ---
+    // --- NEW: Check if everyone has answered (any answer) to finish round early ---
     const { data: activePlayers } = await supabase
       .from('players')
       .select('id')
       .eq('room_id', round.room.id)
       .eq('status', 'playing')
 
-    const { data: correctAnswers } = await supabase
+    const { data: allAnswers } = await supabase
       .from('round_answers')
-      .select('player_id')
+      .select('player_id, points_earned, is_correct')
       .eq('round_id', roundId)
-      .eq('is_correct', true)
 
-    if (activePlayers && correctAnswers && correctAnswers.length >= activePlayers.length) {
-      // Check if all active players are in the correctAnswers list
+    if (activePlayers && allAnswers && allAnswers.length >= activePlayers.length) {
       const activePlayerIds = activePlayers.map(p => p.id)
-      const correctPlayerIds = correctAnswers.map(a => a.player_id)
-      const allAnswered = activePlayerIds.every(id => correctPlayerIds.includes(id))
+      const answeredPlayerIds = allAnswers.map(a => a.player_id)
+      const everyoneAnswered = activePlayerIds.every(id => answeredPlayerIds.includes(id))
 
-      if (allAnswered) {
+      if (everyoneAnswered) {
+        // If boolean round, apply points to all players now before marking as finished
+        if (round.type === 'boolean') {
+          for (const ans of allAnswers) {
+            const { data: p } = await supabase
+              .from('players')
+              .select('score, streak')
+              .eq('id', ans.player_id)
+              .single()
+
+            if (p) {
+              const newS = ans.is_correct ? (p.streak + 1) : 0
+              await supabase
+                .from('players')
+                .update({
+                  score: p.score + ans.points_earned,
+                  streak: newS
+                })
+                .eq('id', ans.player_id)
+            }
+          }
+        }
+
         await supabase
           .from('rounds')
           .update({

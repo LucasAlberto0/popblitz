@@ -5,15 +5,28 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import AvatarSelect from "@/components/game/AvatarSelect";
-import { Loader2 } from "lucide-react";
+import { Loader2, Rocket, Zap } from "lucide-react";
 
 function SetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode") || "join";
 
-  const [name, setName] = useState("");
-  const [avatar, setAvatar] = useState("🎮");
+  // Load previous player data if exists
+  const [name, setName] = useState(() => {
+    if (typeof window !== 'undefined') {
+       const saved = sessionStorage.getItem("player") || localStorage.getItem("player");
+       return saved ? JSON.parse(saved).name : "";
+    }
+    return "";
+  });
+  const [avatar, setAvatar] = useState(() => {
+    if (typeof window !== 'undefined') {
+       const saved = sessionStorage.getItem("player") || localStorage.getItem("player");
+       return saved ? JSON.parse(saved).avatar : "🎮";
+    }
+    return "🎮";
+  });
   const [roomCode, setRoomCode] = useState("");
   const [nameGlow, setNameGlow] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -44,13 +57,17 @@ function SetupContent() {
           return;
         }
 
-        sessionStorage.setItem("player", JSON.stringify({
+        const playerInfo = JSON.stringify({
           id: data.player.id,
           sessionId: data.player.sessionId,
           name: data.player.name,
           avatar: data.player.avatar,
+          roomCode: data.room.code,
           isHost: true,
-        }));
+        });
+
+        sessionStorage.setItem("player", playerInfo);
+        localStorage.setItem("player", playerInfo);
 
         router.push(`/lobby/${data.room.code}?host=true`);
       } else {
@@ -66,6 +83,7 @@ function SetupContent() {
           body: JSON.stringify({
             playerName: name.trim(),
             playerAvatar: avatar,
+            sessionId: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem("player") || "{}").sessionId : null
           }),
         });
         
@@ -77,13 +95,17 @@ function SetupContent() {
           return;
         }
 
-        sessionStorage.setItem("player", JSON.stringify({
+        const playerInfo = JSON.stringify({
           id: data.player.id,
           sessionId: data.player.sessionId,
           name: data.player.name,
           avatar: data.player.avatar,
+          roomCode: roomCode.toUpperCase(),
           isHost: false,
-        }));
+        });
+
+        sessionStorage.setItem("player", playerInfo);
+        localStorage.setItem("player", playerInfo);
 
         router.push(`/lobby/${roomCode.toUpperCase()}`);
       }
@@ -177,8 +199,10 @@ function SetupContent() {
           disabled={!name.trim() || isLoading}
           className="btn-neon w-full py-4 rounded-xl text-primary-foreground font-display text-sm tracking-widest disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {isLoading ? <Loader2 className="animate-spin" /> : null}
-          {isLoading ? "Conectando..." : mode === "create" ? "🚀 Criar Sala" : "⚡ Entrar"}
+          {isLoading ? <Loader2 className="animate-spin" /> : (
+            mode === "create" ? <Rocket size={20} /> : <Zap size={20} />
+          )}
+          {isLoading ? "Conectando..." : mode === "create" ? "Criar Sala" : "Entrar"}
         </motion.button>
 
         <button

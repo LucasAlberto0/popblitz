@@ -22,9 +22,11 @@ export async function POST(
     }
 
     if (round.status !== 'finished') {
+      /* 
       if (round.room.host_id !== sessionId) {
         return NextResponse.json({ error: 'Only host can finish the round' }, { status: 403 })
       }
+      */
 
       const { error: updateRoundError } = await supabase
         .from('rounds')

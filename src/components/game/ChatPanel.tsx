@@ -22,11 +22,21 @@ const ChatPanel = ({ roomCode }: ChatPanelProps) => {
   const [input, setInput] = useState("");
   const [player, setPlayer] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isInitialSync = useRef(true);
   const supabase = createClient();
 
   useEffect(() => {
-    const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
-    setPlayer(playerData);
+    const sessionData = sessionStorage.getItem("player");
+    if (sessionData) {
+      setPlayer(JSON.parse(sessionData));
+    } else {
+      const localData = localStorage.getItem("player");
+      if (localData) {
+        const parsed = JSON.parse(localData);
+        setPlayer(parsed);
+        sessionStorage.setItem("player", localData);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -35,6 +45,7 @@ const ChatPanel = ({ roomCode }: ChatPanelProps) => {
     const channel = supabase.channel(`chat:${roomCode}`, {
       config: {
         broadcast: { self: true },
+        presence: { key: player.id },
       },
     });
 
@@ -43,7 +54,53 @@ const ChatPanel = ({ roomCode }: ChatPanelProps) => {
         const newMessage = payload.payload as ChatMessage;
         setMessages((prev) => [...prev, newMessage]);
       })
-      .subscribe();
+      .on("presence", { event: "sync" }, () => {
+        // After first sync, we know who was already there
+        setTimeout(() => {
+          isInitialSync.current = false;
+        }, 1000); // Small buffer
+      })
+      .on("presence", { event: "join" }, ({ newPresences }) => {
+        if (isInitialSync.current) return;
+
+        newPresences.forEach((p: any) => {
+          if (p.id !== player.id) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `join-${p.id}-${Date.now()}`,
+                sender: "Sistema",
+                text: `${p.name || "Alguém"} entrou na sala`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                isSystem: true,
+              },
+            ]);
+          }
+        });
+      })
+      .on("presence", { event: "leave" }, ({ leftPresences }) => {
+        leftPresences.forEach((p: any) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `leave-${p.id}-${Date.now()}`,
+              sender: "Sistema",
+              text: `${p.name || "Alguém"} saiu da sala`,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              isSystem: true,
+            },
+          ]);
+        });
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await channel.track({
+            id: player.id,
+            name: player.name,
+            avatar: player.avatar,
+          });
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -75,7 +132,7 @@ const ChatPanel = ({ roomCode }: ChatPanelProps) => {
   };
 
   return (
-    <div className="glass-card flex flex-col h-full min-h-[300px] lg:min-h-0">
+    <div className="glass-card flex flex-col h-full min-h-0">
       <div className="px-4 py-3 border-b border-border">
         <h3 className="font-display text-xs tracking-widest text-primary uppercase">Chat</h3>
       </div>

@@ -4,7 +4,7 @@ import { useState, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
-import { Copy, Check, Crown, Loader2 } from "lucide-react";
+import { Copy, Check, Crown, Loader2, Play } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 import ChatPanel from "@/components/game/ChatPanel";
 
@@ -13,9 +13,31 @@ function LobbyContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const code = params.code as string;
-  const isHost = searchParams.get("host") === "true";
+  // Determine if user is host based on room data AND local storage
+  const [playerData, setPlayerData] = useState<any>(null);
   
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sessionData = sessionStorage.getItem("player");
+      if (sessionData) {
+        setPlayerData(JSON.parse(sessionData));
+      } else {
+        const localData = localStorage.getItem("player");
+        if (localData) {
+          const parsed = JSON.parse(localData);
+          setPlayerData(parsed);
+          sessionStorage.setItem("player", localData);
+        }
+      }
+    }
+  }, []);
+
   const { room, players, isLoading: initialLoading } = useRealtimeRoom(code);
+  
+  const isHost = useMemo(() => {
+    if (!room || !playerData) return searchParams.get("host") === "true";
+    return room.host_id === playerData.sessionId;
+  }, [room, playerData, searchParams]);
   const [copied, setCopied] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +46,7 @@ function LobbyContent() {
   const [timePerRound, setTimePerRound] = useState(20);
   const [intervalTime, setIntervalTime] = useState(8);
   const [includeAudio, setIncludeAudio] = useState(true);
+  const [includeSurprise, setIncludeSurprise] = useState(false);
   const [onlyAudio, setOnlyAudio] = useState(false);
 
   // Redirect when game starts
@@ -42,7 +65,7 @@ function LobbyContent() {
   const handleStartGame = async () => {
     setIsStarting(true);
     try {
-      const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
+      if (!playerData) throw new Error("Dados do jogador não encontrados");
       
       const res = await fetch(`/api/rooms/${code}/start`, {
         method: "POST",
@@ -54,6 +77,7 @@ function LobbyContent() {
           timePerRound: timePerRound,
           intervalTime: intervalTime,
           includeAudio: includeAudio,
+          includeSurprise: includeSurprise,
           onlyAudio: onlyAudio
         }),
       });
@@ -168,7 +192,7 @@ function LobbyContent() {
                   disabled={players.length < 2 || isStarting}
                   className="btn-neon flex-1 py-4 rounded-xl text-primary-foreground font-display text-sm tracking-widest disabled:opacity-40 flex items-center justify-center gap-2"
                 >
-                  {isStarting ? <Loader2 className="animate-spin" /> : "🎬"}
+                  {isStarting ? <Loader2 className="animate-spin" /> : <Play size={20} />}
                   {isStarting ? "Iniciando..." : "Iniciar Jogo"}
                 </motion.button>
               )}
@@ -243,7 +267,7 @@ function LobbyContent() {
                     )}
                   </div>
 
-                  <div className="space-y-2 pt-2 border-t border-border/30">
+                  <div className="space-y-4 pt-2 border-t border-border/30">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-display text-muted-foreground tracking-widest uppercase cursor-pointer" htmlFor="audio-toggle">
                         Incluir Rodadas de Áudio
@@ -263,10 +287,29 @@ function LobbyContent() {
                         <div className={`w-3 h-3 rounded-full ${(room as any)?.include_audio ? "bg-neon-cyan shadow-[0_0_8px_rgba(0,255,255,0.5)]" : "bg-muted-foreground/30"}`} />
                       )}
                     </div>
-                    {/* Only Audio (Debug) removed as per user request */}
+
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-display text-muted-foreground tracking-widest uppercase cursor-pointer" htmlFor="surprise-toggle">
+                        Rodada Surpresa (Roubo)
+                      </label>
+                      {isHost ? (
+                        <input 
+                          id="surprise-toggle"
+                          type="checkbox"
+                          className="w-5 h-5 accent-neon-magenta bg-background border-border rounded cursor-pointer"
+                          checked={includeSurprise}
+                          onChange={(e) => setIncludeSurprise(e.target.checked)}
+                        />
+                      ) : (
+                        <div className={`w-3 h-3 rounded-full ${(room as any)?.include_surprise ? "bg-neon-magenta shadow-[0_0_8px_rgba(255,0,255,0.5)]" : "bg-muted-foreground/30"}`} />
+                      )}
+                    </div>
+
+                    
                     {!isHost && (
                       <p className="text-[10px] text-muted-foreground/60 italic">
                         {(room as any)?.include_audio ? "Desafio musical ativado!" : "Apenas imagens e texto"}
+                        {(room as any)?.include_surprise && " • Rodada surpresa habilitada!"}
                       </p>
                     )}
                   </div>

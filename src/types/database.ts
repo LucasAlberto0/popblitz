@@ -15,6 +15,7 @@ export interface Room {
   max_score?: number
   difficulty?: string
   include_audio?: boolean
+  include_surprise?: boolean
   created_at: string
   updated_at: string
 }
@@ -44,6 +45,7 @@ export interface Round {
   status: RoundStatus
   started_at: string | null
   ended_at: string | null
+  lucky_player_id?: string | null
 }
 
 export interface RoundAnswer {

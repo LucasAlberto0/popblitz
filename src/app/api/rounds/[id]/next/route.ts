@@ -23,9 +23,11 @@ export async function POST(
         }
 
         // 2. Security check
+        /*
         if (currentRound.room.host_id !== sessionId) {
             return NextResponse.json({ error: 'Only host can trigger next round' }, { status: 403 })
         }
+        */
 
         // 3. Check for a winner (>= 120 points)
         const { data: winner } = await supabase
@@ -67,11 +69,26 @@ export async function POST(
         let nextRound;
 
         if (nextRoundExist) {
+            let luckyPlayerId = null;
+            
+            if (nextRoundExist.type === 'surprise') {
+                const { data: players } = await supabase
+                    .from('players')
+                    .select('id')
+                    .eq('room_id', currentRound.room.id)
+                    .eq('status', 'playing');
+                
+                if (players && players.length > 0) {
+                    luckyPlayerId = players[Math.floor(Math.random() * players.length)].id;
+                }
+            }
+
             const { data } = await supabase
                 .from('rounds')
                 .update({
                     status: 'active',
-                    started_at: new Date().toISOString()
+                    started_at: new Date().toISOString(),
+                    lucky_player_id: luckyPlayerId
                 })
                 .eq('id', nextRoundExist.id)
                 .select()
