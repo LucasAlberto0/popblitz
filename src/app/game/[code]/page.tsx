@@ -555,8 +555,8 @@ function GameContent() {
       {Preloader}
       <div className="relative z-10 flex-1 flex flex-col lg:flex-row min-h-0 h-full overflow-hidden">
         {/* Main Game Area */}
-        <div className="flex-[2] lg:flex-1 flex flex-col p-3 lg:p-6 min-w-0 min-h-0 overflow-hidden">
-          <div className="flex items-center justify-between mb-4">
+        <div className="flex-1 flex flex-col p-3 lg:p-6 min-w-0 min-h-0 overflow-hidden">
+          <div className="flex items-center justify-between mb-2 lg:mb-4 flex-shrink-0">
             <div className="flex flex-col">
               <span className="font-display text-[10px] text-primary/70 tracking-widest uppercase">
                 Rodada {currentRound.round_number}
@@ -699,7 +699,7 @@ function GameContent() {
             )}
           </AnimatePresence>
 
-          <div className="flex-1 flex items-center justify-center relative">
+          <div className="flex-1 flex flex-col items-center lg:justify-center justify-start relative min-h-0 overflow-hidden">
             <AnimatePresence mode="wait">
               {preGameCountdown !== null ? (
                 <motion.div
@@ -738,11 +738,11 @@ function GameContent() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 1.05 }}
-                  className={`glass-card p-2 sm:p-4 max-w-lg w-full flex flex-col gap-3 transition-all duration-700 max-h-full overflow-y-auto custom-scrollbar ${preGameCountdown !== null ? "blur-md brightness-50 grayscale select-none" : ""
+                  className={`glass-card p-2 sm:p-4 max-w-lg w-full flex flex-col gap-2 sm:gap-3 transition-all duration-700 min-h-0 max-h-full overflow-y-auto custom-scrollbar ${preGameCountdown !== null ? "blur-md brightness-50 grayscale select-none" : ""
                     }`}
                 >
                   {(currentRound as any).question && (
-                    <div className={`px-4 ${isSurpriseRound ? "py-3 bg-secondary/10 border-secondary/20" : "py-6 bg-primary/10 border-primary/20"} rounded-lg border relative ${!currentRound.image_url && !isSurpriseRound ? "min-h-[16rem] flex items-center justify-center" : ""}`}>
+                    <div className={`px-4 ${isSurpriseRound ? "py-2 sm:py-3 bg-secondary/10 border-secondary/20" : "py-3 sm:py-6 bg-primary/10 border-primary/20"} rounded-lg border relative ${!currentRound.image_url && !isSurpriseRound ? "min-h-[6rem] sm:min-h-[16rem] flex items-center justify-center" : ""}`}>
                       <p className={`font-display ${isSurpriseRound ? "text-secondary text-base" : "text-primary"} text-center ${!currentRound.image_url && !isSurpriseRound ? "text-xl sm:text-3xl font-bold" : "text-sm sm:text-base"} font-bold`}>
                         {(currentRound as any).question}
                       </p>
@@ -756,14 +756,14 @@ function GameContent() {
                   )}
                   
                   {currentRound.type === 'audio' && currentRound.audio_url && (
-                    <div className="relative overflow-hidden rounded-lg group bg-primary/5 p-8 flex flex-col items-center justify-center gap-6 min-h-[16rem]">
+                    <div className="relative overflow-hidden rounded-lg group bg-primary/5 p-4 sm:p-8 flex flex-col items-center justify-center gap-2 sm:gap-6 min-h-[8rem] sm:min-h-[16rem]">
                        <div className="relative">
                           <motion.div 
                             animate={{ scale: [1, 1.1, 1] }} 
                             transition={{ duration: 1.5, repeat: Infinity }}
-                            className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center border-2 border-primary/40 shadow-[0_0_30px_rgba(var(--primary-rgb),0.3)]"
+                            className="w-16 h-16 sm:w-24 sm:h-24 bg-primary/20 rounded-full flex items-center justify-center border-2 border-primary/40 shadow-[0_0_30px_rgba(var(--primary-rgb),0.3)]"
                           >
-                            <svg className="w-12 h-12 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-8 h-8 sm:w-12 sm:h-12 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                             </svg>
                           </motion.div>
@@ -1076,7 +1076,7 @@ function GameContent() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`flex gap-3 mt-4 ${feedback === "wrong" ? "animate-[shake_0.3s_ease]" : ""}`}
+              className={`flex gap-3 mt-2 lg:mt-4 flex-shrink-0 ${feedback === "wrong" ? "animate-[shake_0.3s_ease]" : ""}`}
             >
               <input
                 ref={inputRef}
@@ -1123,7 +1123,7 @@ function GameContent() {
         </div>
 
         {/* Sidebar: Ranking and Chat */}
-          <div className="flex-1 lg:flex-none lg:w-80 flex flex-col gap-3 p-3 lg:p-6 border-t lg:border-t-0 lg:border-l border-border bg-black/20 backdrop-blur-xl min-h-0 h-1/3 lg:h-full overflow-hidden">
+          <div className="flex-none lg:w-80 flex flex-col gap-3 p-3 lg:p-6 border-t lg:border-t-0 lg:border-l border-border bg-black/20 backdrop-blur-xl h-[30dvh] lg:h-full overflow-hidden">
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
               <RankingList 
                 players={players} 
