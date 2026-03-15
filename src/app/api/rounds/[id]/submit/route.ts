@@ -70,12 +70,7 @@ export async function POST(
     // Check main answer and all alternative variants in answer_hints
     const variants = [normalizedCorrect, ...(round.answer_hints || []).map((h: string) => normalizeStr(h))]
 
-    const isCorrect = variants.some(v =>
-      normalizedAnswer === v ||
-      // Allows abbreviations such as 'ps2' to match correctly, and checks if user answer is at least 3 chars contained in correct
-      (v.length > 3 && v.includes(normalizedAnswer) && normalizedAnswer.length >= 3) ||
-      (normalizedAnswer === v.replace(/\s/g, '')) // E.g., match "ps2" if variant is "ps 2"
-    )
+    const isCorrect = variants.some(v => normalizedAnswer === v)
 
     // Get number of existing correct answers to determine position
     const { count: previousCorrectCount } = await supabase
