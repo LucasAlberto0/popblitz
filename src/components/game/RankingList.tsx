@@ -35,7 +35,8 @@ const RankingList = ({ players, currentPlayerId, answers, maxScore, roundStatus,
             const hideFeedback = roundType === 'boolean' && roundStatus !== 'finished';
             const showCorrect = !hideFeedback && !!correctAnswer;
             const showResponseTime = !hideFeedback && correctAnswer ? (correctAnswer.time_ms / 1000).toFixed(3) : undefined;
-            const showLastGuess = !hideFeedback && !correctAnswer && lastGuess ? lastGuess : undefined;
+            // Only show the typed answer text if the round is finished (or if it's a wrong guess)
+            const showLastGuess = !hideFeedback && (roundStatus === 'finished' || !correctAnswer) ? lastGuess : undefined;
 
             return (
               <PlayerCard

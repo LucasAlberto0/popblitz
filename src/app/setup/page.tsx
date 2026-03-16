@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import AvatarSelect from "@/components/game/AvatarSelect";
+import AvatarDisplay, { avatarIconsMap } from "@/components/game/AvatarDisplay";
 import { Loader2, Rocket, Zap } from "lucide-react";
 
 function SetupContent() {
@@ -23,9 +24,15 @@ function SetupContent() {
   const [avatar, setAvatar] = useState(() => {
     if (typeof window !== 'undefined') {
        const saved = sessionStorage.getItem("player") || localStorage.getItem("player");
-       return saved ? JSON.parse(saved).avatar : "🎮";
+       if (saved) {
+         const parsed = JSON.parse(saved);
+         // Ensure we don't load old emojis as IDs
+         if (parsed.avatar && Object.keys(avatarIconsMap).includes(parsed.avatar)) {
+           return parsed.avatar;
+         }
+       }
     }
-    return "🎮";
+    return "game";
   });
   const [roomCode, setRoomCode] = useState("");
   const [nameGlow, setNameGlow] = useState(false);
@@ -168,7 +175,7 @@ function SetupContent() {
             transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
             className="w-16 h-16 rounded-2xl glass-card neon-border-cyan flex items-center justify-center text-3xl"
           >
-            {avatar}
+             <AvatarDisplay avatarId={avatar} size={40} fallbackText={name} />
           </motion.div>
           <div>
             <p className="font-display text-sm text-primary">{name || "???"}</p>

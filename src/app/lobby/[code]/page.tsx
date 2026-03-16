@@ -7,6 +7,7 @@ import ParticleBackground from "@/components/game/ParticleBackground";
 import { Copy, Check, Crown, Loader2, Play } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 import ChatPanel from "@/components/game/ChatPanel";
+import AvatarDisplay from "@/components/game/AvatarDisplay";
 
 function LobbyContent() {
   const router = useRouter();
@@ -164,9 +165,9 @@ function LobbyContent() {
                       <motion.div
                         animate={{ y: [0, -4, 0] }}
                         transition={{ duration: 2, repeat: Infinity, delay: i * 0.3 }}
-                        className="text-3xl mb-2 flex-grow flex items-center justify-center"
+                        className="mb-2 flex-grow flex items-center justify-center"
                       >
-                        {p.avatar}
+                        <AvatarDisplay avatarId={p.avatar} size={36} fallbackText={p.name} />
                       </motion.div>
                       <p className="font-ui font-semibold text-xs truncate w-full" title={p.name}>{p.name}</p>
                       <div className={`w-2 h-2 rounded-full mt-2 ${p.status === 'ready' ? "bg-neon-green" : "bg-muted-foreground"}`} />

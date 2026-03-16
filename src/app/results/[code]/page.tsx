@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import ConfettiEffect from "@/components/game/ConfettiEffect";
 import { Trophy, Medal, Award, RotateCcw, Home, Loader2 } from "lucide-react";
+import AvatarDisplay from "@/components/game/AvatarDisplay";
+import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 
 function ResultsContent() {
   const router = useRouter();
@@ -14,26 +16,40 @@ function ResultsContent() {
   const [showConfetti, setShowConfetti] = useState(true);
   const [players, setPlayers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchResults = async () => {
-      try {
-        const res = await fetch(`/api/rooms/${code}`);
-        const data = await res.json();
-        
-        if (data.players) {
-          const sorted = [...data.players].sort((a: any, b: any) => b.score - a.score);
-          setPlayers(sorted);
-        }
-      } catch (err) {
-        console.error("Error fetching results:", err);
-      } finally {
-        setIsLoading(false);
+    if (typeof window !== 'undefined') {
+      const sessionData = sessionStorage.getItem("player") || localStorage.getItem("player");
+      if (sessionData) {
+        const parsed = JSON.parse(sessionData);
+        setCurrentPlayerId(parsed.id);
       }
-    };
+    }
+  }, []);
 
-    fetchResults();
-  }, [code]);
+  const { room, players: realtimePlayers, isLoading: isRealtimeLoading } = useRealtimeRoom(code);
+
+  const isHost = realtimePlayers.find(p => p.id === currentPlayerId)?.is_host || room?.host_id === currentPlayerId;
+
+  useEffect(() => {
+    if (room?.status === 'waiting') {
+      router.push(`/lobby/${code}`);
+    }
+  }, [room?.status, code, router]);
+
+  const handleRestart = async () => {
+    if (!currentPlayerId) return;
+    try {
+      await fetch(`/api/rooms/${code}/restart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: currentPlayerId })
+      });
+    } catch (err) {
+      console.error("Error restarting:", err);
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setShowConfetti(false), 5000);
@@ -47,9 +63,9 @@ function ResultsContent() {
   ];
 
   const podiumOrder = [1, 0, 2];
-  const podiumHeights = ["h-32", "h-44", "h-24"];
+  const podiumHeights = ["h-44", "h-32", "h-24"];
 
-  if (isLoading) {
+  if (isRealtimeLoading) {
     return (
       <div className="relative min-h-screen gradient-bg-animated flex items-center justify-center">
         <ParticleBackground />
@@ -61,8 +77,8 @@ function ResultsContent() {
     );
   }
 
-  const sorted = [...players].sort((a: any, b: any) => b.score - a.score);
-  const top3 = sorted.slice(0, 3);
+   const sorted = [...realtimePlayers].sort((a: any, b: any) => b.score - a.score);
+   const top3 = sorted.slice(0, 3);
 
   return (
     <div className="relative min-h-screen gradient-bg-animated flex items-center justify-center px-4 py-8">
@@ -106,8 +122,12 @@ function ResultsContent() {
                 >
                   {podiumIcons[pos]}
                 </motion.div>
-                <div className="text-3xl mb-1">{player.avatar}</div>
-                <p className="font-ui font-bold text-sm text-foreground">{player.name}</p>
+                <div className="mb-1">
+                  <AvatarDisplay avatarId={player.avatar} size={48} fallbackText={player.name} />
+                </div>
+                 <p className={`font-ui font-bold text-sm ${player.id === currentPlayerId ? "text-primary anim-pulse" : "text-foreground"}`}>
+                  {player.name} {player.id === currentPlayerId && "(Você)"}
+                </p>
                 <p className="font-display text-xs text-primary">{player.score} pts</p>
                 <div className={`w-20 ${podiumHeights[pos]} mt-2 rounded-t-xl bg-gradient-to-t from-muted to-card border border-border flex items-start justify-center pt-3`}>
                   <span className="font-display text-lg text-muted-foreground">#{pos + 1}</span>
@@ -124,25 +144,29 @@ function ResultsContent() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 1 + i * 0.1 }}
-              className="flex items-center gap-3 p-3 rounded-lg bg-muted/20"
+               className={`flex items-center gap-3 p-3 rounded-lg ${p.id === currentPlayerId ? "bg-primary/10 border border-primary/20" : "bg-muted/20"}`}
             >
               <span className="font-display text-sm text-muted-foreground w-6 text-center">#{i + 1}</span>
-              <span className="text-xl">{p.avatar}</span>
-              <span className="font-ui font-semibold text-sm flex-1">{p.name}</span>
+              <AvatarDisplay avatarId={p.avatar} size={28} fallbackText={p.name} />
+               <span className={`font-ui font-semibold text-sm flex-1 ${p.id === currentPlayerId ? "text-primary" : ""}`}>
+                {p.name} {p.id === currentPlayerId && <span className="text-[10px] text-primary/60 ml-1">(Você)</span>}
+              </span>
               <span className="font-display text-sm text-primary">{p.score}</span>
             </motion.div>
           ))}
         </div>
 
         <div className="flex gap-3">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => router.push(`/game/${code}`)}
-            className="btn-neon flex-1 py-4 rounded-xl text-primary-foreground font-display text-xs tracking-widest flex items-center justify-center gap-2"
-          >
-            <RotateCcw size={16} /> Jogar Novamente
-          </motion.button>
+           {isHost && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleRestart}
+              className="btn-neon flex-1 py-4 rounded-xl text-primary-foreground font-display text-xs tracking-widest flex items-center justify-center gap-2"
+            >
+              <RotateCcw size={16} /> Jogar Novamente
+            </motion.button>
+          )}
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}

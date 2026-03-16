@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import TimerRing from "@/components/game/TimerRing";
 import RankingList from "@/components/game/RankingList";
 import ChatPanel from "@/components/game/ChatPanel";
-import { Loader2, Settings, X, Crown, Info, Copy, Check, Volume2, VolumeX } from "lucide-react";
+import AvatarDisplay from "@/components/game/AvatarDisplay";
+import { Loader2, Settings, X, Crown, Info, Copy, Check, Volume2, VolumeX, XCircle } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 
 function GameContent() {
@@ -39,6 +40,7 @@ function GameContent() {
   
   // Mobile Audio Reliability State
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const soundBankRef = useRef<{
     correct: HTMLAudioElement | null;
     wrong: HTMLAudioElement | null;
@@ -99,6 +101,14 @@ function GameContent() {
     return () => window.removeEventListener('click', checkAudio);
   }, []);
 
+  const handleAudioToggle = async () => {
+    if (!isAudioEnabled) {
+      await unlockAudio();
+    } else {
+      setIsMuted(!isMuted);
+    }
+  };
+
   const unlockAudio = async () => {
     const { correct } = soundBankRef.current;
     if (!correct) return;
@@ -112,6 +122,7 @@ function GameContent() {
       correct.volume = 0.5;
       
       setIsAudioEnabled(true);
+      setIsMuted(false); // Ensure unmuted after unlock
       // Small feedback
       const audio = new Audio('/sounds/msn.mp3?v=2');
       audio.volume = 0.2;
@@ -281,7 +292,7 @@ function GameContent() {
       
       if (hasNewCorrect && !showRoundResult && currentRound?.type !== 'boolean') {
         const sound = soundBankRef.current.correct;
-        if (sound && isAudioEnabled) {
+        if (sound && isAudioEnabled && !isMuted) {
           sound.currentTime = 0;
           sound.play().catch(() => {
             // Fallback if pooling fails
@@ -375,7 +386,7 @@ function GameContent() {
                   setFeedback("correct");
                   // Play sound only for those who got it right in boolean rounds
                   const sound = soundBankRef.current.correct;
-                  if (sound && isAudioEnabled) {
+                  if (sound && isAudioEnabled && !isMuted) {
                     sound.currentTime = 0;
                     sound.play().catch(() => {});
                   }
@@ -515,7 +526,7 @@ function GameContent() {
 
       // Correct sound for the thief
       const sound = soundBankRef.current.correct;
-      if (sound && isAudioEnabled) {
+      if (sound && isAudioEnabled && !isMuted) {
         sound.currentTime = 0;
         sound.play().catch(() => {});
       }
@@ -570,15 +581,17 @@ function GameContent() {
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                onClick={unlockAudio}
+                onClick={handleAudioToggle}
                 className={`p-2 rounded-full border shadow-lg transition-all ${
-                  isAudioEnabled 
-                  ? "bg-neon-green/10 border-neon-green/30 text-neon-green" 
-                  : "bg-destructive/10 border-destructive/30 text-destructive animate-pulse"
+                  !isAudioEnabled 
+                    ? "bg-destructive/10 border-destructive/30 text-destructive animate-pulse"
+                    : isMuted
+                      ? "bg-neon-yellow/10 border-neon-yellow/30 text-neon-yellow"
+                      : "bg-neon-green/10 border-neon-green/30 text-neon-green"
                 }`}
-                title={isAudioEnabled ? "Áudio Ativado" : "Ativar Áudio"}
+                title={!isAudioEnabled ? "Ativar Áudio" : isMuted ? "Desmutar" : "Mutar"}
               >
-                {isAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                {!isAudioEnabled || isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1, rotate: 90 }}
@@ -678,7 +691,7 @@ function GameContent() {
                         <div className="space-y-1">
                           <span className="text-[10px] uppercase font-display text-muted-foreground">Anfitrião</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-lg">{players.find(p => p.is_host)?.avatar}</span>
+                            <AvatarDisplay avatarId={players.find(p => p.is_host)?.avatar || "game"} size={28} fallbackText={players.find(p => p.is_host)?.name} />
                             <p className="text-sm font-bold text-neon-yellow">{players.find(p => p.is_host)?.name || "Desconhecido"}</p>
                           </div>
                         </div>
@@ -790,7 +803,7 @@ function GameContent() {
                          src={currentRound.audio_url} 
                          ref={(el) => {
                            if (el) {
-                             el.volume = 0.5;
+                             el.volume = isMuted ? 0 : 0.5;
                              if (preGameCountdown === null && !showRoundResult) {
                                el.play().catch(() => {});
                              } else {
@@ -861,7 +874,7 @@ function GameContent() {
                                          exit={{ y: -20, opacity: 0, scale: 0.5 }}
                                          className="flex flex-col items-center"
                                       >
-                                         <span className="text-4xl mb-2">{players[rafflePlayerIndex]?.avatar}</span>
+                                         <AvatarDisplay avatarId={players[rafflePlayerIndex]?.avatar} size={48} fallbackText={players[rafflePlayerIndex]?.name} />
                                          <span className="font-display text-xl text-primary font-bold">{players[rafflePlayerIndex]?.name}</span>
                                       </motion.div>
                                    </AnimatePresence>
@@ -920,7 +933,7 @@ function GameContent() {
                                          <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity }}>🔪</motion.span>
                                          </div>
-                                         <span className="text-3xl filter drop-shadow-md">{p.avatar}</span>
+                                         <AvatarDisplay avatarId={p.avatar} size={32} fallbackText={p.name} />
                                          <span className="text-sm font-black truncate w-full text-center tracking-tight">{p.name}</span>
                                          <div className="flex items-center gap-1">
                                             <span className={`text-[11px] font-bold ${p.score < 0 ? "text-destructive" : "text-neon-cyan"}`}>
@@ -1110,15 +1123,26 @@ function GameContent() {
 
           <AnimatePresence>
             {feedback && !showRoundResult && currentRound.type !== 'boolean' && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className={`text-center text-sm font-ui mt-2 ${feedback === "correct" ? "text-neon-green" : "text-destructive"
-                  }`}
+                className={`flex items-center justify-center gap-2 mt-2 font-ui text-sm font-bold ${
+                  feedback === "correct" ? "text-neon-green" : "text-destructive"
+                }`}
               >
-                {feedback === "correct" ? "✅ Acertou!" : "❌ Errou!"}
-              </motion.p>
+                {feedback === "correct" ? (
+                  <>
+                    <Check size={16} />
+                    <span>Acertou!</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={16} />
+                    <span>Errou!</span>
+                  </>
+                )}
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -1141,7 +1165,7 @@ function GameContent() {
               </button>
             </div>
 
-            <div className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar ${activeSidebarTab === 'ranking' ? 'block' : 'hidden lg:block'}`}>
+            <div className={`flex-1 lg:flex-[1.6] min-h-0 overflow-y-auto custom-scrollbar ${activeSidebarTab === 'ranking' ? 'block' : 'hidden lg:block'}`}>
               <RankingList 
                 players={players} 
                 answers={answers} 

@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
+import AvatarDisplay from "./AvatarDisplay";
 
 interface PlayerCardProps {
   name: string;
@@ -42,12 +43,8 @@ const PlayerCard = ({
         } ${highlight ? "neon-border-magenta" : ""} ${isCorrect ? "border-neon-green/40 shadow-[0_0_10px_rgba(57,255,20,0.1)]" : ""} ${isSpectator ? "opacity-60 saturate-50" : ""}`}
     >
       <div className="relative">
-        <div className={`w-12 h-12 rounded-lg ${isCorrect ? "bg-neon-green/10" : "bg-muted/30"} flex items-center justify-center text-2xl overflow-hidden border border-border/50`}>
-          {avatar ? (
-            <span className="text-2xl drop-shadow-sm">{avatar}</span>
-          ) : (
-            <span className="text-muted-foreground text-sm font-ui uppercase font-bold">{name[0]}</span>
-          )}
+        <div className={`w-12 h-12 rounded-lg ${isCorrect ? "bg-neon-green/10" : "bg-muted/30"} flex items-center justify-center overflow-hidden border border-border/50`}>
+          <AvatarDisplay avatarId={avatar} fallbackText={name} size={32} />
         </div>
         <span className={`absolute -bottom-1.5 -right-1.5 text-[10px] font-display font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-background shadow-lg bg-gradient-to-br ${rank <= 3 ? rankColors[rank - 1] : "from-muted-foreground to-muted"
           } text-background`}>
@@ -72,15 +69,27 @@ const PlayerCard = ({
 
         <div className="min-h-[16px] flex items-center mt-0.5">
           <AnimatePresence mode="wait">
-            {isCorrect && responseTime ? (
-              <motion.p
-                key="time"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-[10px] font-display font-bold text-neon-green/80 tracking-tight"
+            {isCorrect ? (
+              <motion.div
+                key="correct-feedback"
+                initial={{ opacity: 0, x: -5 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex flex-col items-start gap-0.5 mt-0.5"
               >
-                {responseTime}s
-              </motion.p>
+                <div className="flex items-center gap-2">
+                  {responseTime && (
+                    <span className="text-[10px] font-display font-medium text-neon-green/60 tracking-tight shrink-0">
+                      {responseTime}s
+                    </span>
+                  )}
+                  {isCorrect && !responseTime && <span className="text-[10px] font-display font-medium text-neon-green/60 tracking-tight">Acertou!</span>}
+                </div>
+                {lastGuess && (
+                  <span className="text-[11px] font-ui font-black text-neon-green lowercase truncate max-w-[140px] leading-tight">
+                    {lastGuess}
+                  </span>
+                )}
+              </motion.div>
             ) : lastGuess ? (
               <motion.p
                 key="guess"
