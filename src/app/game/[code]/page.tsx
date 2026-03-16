@@ -1038,7 +1038,7 @@ function GameContent() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-6 mt-6 justify-center w-full"
+              className="flex gap-3 sm:gap-6 mt-6 justify-center w-full"
             >
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -1048,7 +1048,7 @@ function GameContent() {
                   setAnswer("Verdadeiro");
                   submitAnswer("Verdadeiro");
                 }}
-                className={`flex-1 py-6 rounded-2xl font-display text-xl tracking-widest uppercase transition-all shadow-lg ${
+                className={`flex-1 py-4 sm:py-6 rounded-2xl font-display text-sm sm:text-xl tracking-widest uppercase transition-all shadow-lg ${
                   answered && answer === "Verdadeiro" 
                   ? "bg-neon-green text-black scale-95 shadow-neon-green/40" 
                   : "bg-background/10 border-2 border-neon-green text-neon-green hover:bg-neon-green/10"
@@ -1064,7 +1064,7 @@ function GameContent() {
                   setAnswer("Falso");
                   submitAnswer("Falso");
                 }}
-                className={`flex-1 py-6 rounded-2xl font-display text-xl tracking-widest uppercase transition-all shadow-lg ${
+                className={`flex-1 py-4 sm:py-6 rounded-2xl font-display text-sm sm:text-xl tracking-widest uppercase transition-all shadow-lg ${
                   answered && answer === "Falso" 
                   ? "bg-destructive text-black scale-95 shadow-destructive/40" 
                   : "bg-background/10 border-2 border-destructive text-destructive hover:bg-destructive/10"
