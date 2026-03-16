@@ -40,7 +40,8 @@ export async function GET(
     let currentRound = null
     if (rounds && rounds.length > 0 && room.current_round > 0) {
       currentRound = rounds.find((r: any) => r.round_number === room.current_round)
-    }
+      /*  */
+}
 
     return NextResponse.json({
       room,

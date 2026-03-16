@@ -35,6 +35,7 @@ function GameContent() {
   const lastRaffledRoundRef = useRef<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [activeSidebarTab, setActiveSidebarTab] = useState<'ranking' | 'chat'>('ranking');
   
   // Mobile Audio Reliability State
   const [isAudioEnabled, setIsAudioEnabled] = useState(false);
@@ -550,13 +551,13 @@ function GameContent() {
   }
 
   return (
-    <div className="relative h-[100dvh] bg-background overflow-hidden flex flex-col">
+    <div className="relative min-h-screen lg:h-[100dvh] bg-background overflow-y-auto lg:overflow-hidden flex flex-col custom-scrollbar">
       {/* Hidden Asset Preloader */}
       {Preloader}
-      <div className="relative z-10 flex-1 flex flex-col lg:flex-row min-h-0 h-full overflow-hidden">
+      <div className="relative z-10 lg:flex-1 flex flex-col lg:flex-row lg:min-h-0 lg:h-full lg:overflow-hidden overflow-y-auto lg:custom-scrollbar">
         {/* Main Game Area */}
-        <div className="flex-1 flex flex-col p-3 lg:p-6 min-w-0 min-h-0 overflow-hidden">
-          <div className="flex items-center justify-between mb-2 lg:mb-4 flex-shrink-0">
+        <div className="lg:flex-1 w-full flex flex-col p-3 lg:p-6 min-w-0 min-h-0 lg:h-full lg:overflow-y-auto custom-scrollbar">
+          <div className="sticky top-0 bg-background/95 backdrop-blur-md z-20 py-2 mb-2 lg:mb-4 flex-shrink-0 flex items-center justify-between">
             <div className="flex flex-col">
               <span className="font-display text-[10px] text-primary/70 tracking-widest uppercase">
                 Rodada {currentRound.round_number}
@@ -738,11 +739,11 @@ function GameContent() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 1.05 }}
-                  className={`glass-card p-2 sm:p-4 max-w-lg w-full flex flex-col gap-2 sm:gap-3 transition-all duration-700 min-h-0 max-h-full overflow-y-auto custom-scrollbar ${preGameCountdown !== null ? "blur-md brightness-50 grayscale select-none" : ""
+                  className={`glass-card p-2 sm:p-4 max-w-xl w-full flex flex-col gap-2 sm:gap-3 transition-all duration-700 min-h-[320px] lg:min-h-0 ${preGameCountdown !== null ? "blur-md brightness-50 grayscale select-none" : ""
                     }`}
                 >
                   {(currentRound as any).question && (
-                    <div className={`px-4 ${isSurpriseRound ? "py-2 sm:py-3 bg-secondary/10 border-secondary/20" : "py-3 sm:py-6 bg-primary/10 border-primary/20"} rounded-lg border relative ${!currentRound.image_url && !isSurpriseRound ? "min-h-[6rem] sm:min-h-[16rem] flex items-center justify-center" : ""}`}>
+                    <div className={`px-4 ${isSurpriseRound ? "py-2 sm:py-3 bg-secondary/10 border-secondary/20" : "py-3 sm:py-6 bg-primary/10 border-primary/20"} rounded-lg border relative ${!currentRound.image_url && !isSurpriseRound ? "grow flex items-center justify-center sm:min-h-[16rem]" : "flex-shrink-0"}`}>
                       <p className={`font-display ${isSurpriseRound ? "text-secondary text-base" : "text-primary"} text-center ${!currentRound.image_url && !isSurpriseRound ? "text-xl sm:text-3xl font-bold" : "text-sm sm:text-base"} font-bold`}>
                         {(currentRound as any).question}
                       </p>
@@ -756,7 +757,7 @@ function GameContent() {
                   )}
                   
                   {currentRound.type === 'audio' && currentRound.audio_url && (
-                    <div className="relative overflow-hidden rounded-lg group bg-primary/5 p-4 sm:p-8 flex flex-col items-center justify-center gap-2 sm:gap-6 min-h-[8rem] sm:min-h-[16rem]">
+                    <div className="relative overflow-hidden rounded-lg group bg-primary/5 p-4 sm:p-8 flex flex-col items-center justify-center gap-2 sm:gap-6 min-h-[240px] sm:min-h-[16rem]">
                        <div className="relative">
                           <motion.div 
                             animate={{ scale: [1, 1.1, 1] }} 
@@ -809,11 +810,11 @@ function GameContent() {
                   )}
 
                   {(currentRound.type === 'image' || !currentRound.type) && currentRound.image_url && currentRound.image_url.trim() !== '' && (
-                    <div className="relative overflow-hidden rounded-lg group bg-white p-2 sm:p-4">
+                    <div className="relative overflow-hidden rounded-lg group bg-white p-1 sm:p-4">
                       <img
                         src={currentRound.image_url}
                         alt="Quiz"
-                        className="w-full h-48 sm:h-64 lg:h-[28rem] object-contain"
+                        className="w-full h-[280px] sm:h-96 lg:h-[28rem] object-contain"
                         onError={(e) => {
                           const target = e.currentTarget;
                           target.style.display = 'none';
@@ -900,7 +901,7 @@ function GameContent() {
                                    initial={{ y: 50, opacity: 0 }}
                                    animate={{ y: 0, opacity: 1 }}
                                    transition={{ delay: 0.5 }}
-                                   className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-lg mt-2 z-10 px-3 py-6 max-h-[350px] overflow-y-auto custom-scrollbar"
+                                   className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-lg mt-2 z-10 px-3 pt-6 pb-12 max-h-[350px] overflow-y-auto custom-scrollbar"
                                 >
                                    {players.filter(p => p.id !== playerData.id).map(p => (
                                       <motion.button
@@ -1076,7 +1077,7 @@ function GameContent() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`flex gap-3 mt-2 lg:mt-4 flex-shrink-0 ${feedback === "wrong" ? "animate-[shake_0.3s_ease]" : ""}`}
+              className={`flex gap-3 mt-1 lg:mb-0 lg:mt-4 flex-shrink-0 ${feedback === "wrong" ? "animate-[shake_0.3s_ease]" : ""}`}
             >
               <input
                 ref={inputRef}
@@ -1123,8 +1124,24 @@ function GameContent() {
         </div>
 
         {/* Sidebar: Ranking and Chat */}
-          <div className="flex-none lg:w-80 flex flex-col gap-3 p-3 lg:p-6 border-t lg:border-t-0 lg:border-l border-border bg-black/20 backdrop-blur-xl h-[30dvh] lg:h-full overflow-hidden">
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+          <div className="flex-none lg:w-80 flex flex-col gap-3 p-3 lg:p-6 border-t lg:border-t-0 lg:border-l border-border bg-black/20 backdrop-blur-xl h-auto mt-3 lg:mt-0 lg:h-full lg:overflow-hidden">
+            {/* Mobile Tabs */}
+            <div className="flex lg:hidden bg-white/5 rounded-xl p-1 mb-1">
+              <button
+                onClick={() => setActiveSidebarTab('ranking')}
+                className={`flex-1 py-2 rounded-lg text-xs font-display transition-all ${activeSidebarTab === 'ranking' ? 'bg-primary text-black font-black' : 'text-muted-foreground'}`}
+              >
+                RANKING
+              </button>
+              <button
+                onClick={() => setActiveSidebarTab('chat')}
+                className={`flex-1 py-2 rounded-lg text-xs font-display transition-all ${activeSidebarTab === 'chat' ? 'bg-primary text-black font-black' : 'text-muted-foreground'}`}
+              >
+                CHAT
+              </button>
+            </div>
+
+            <div className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar ${activeSidebarTab === 'ranking' ? 'block' : 'hidden lg:block'}`}>
               <RankingList 
                 players={players} 
                 answers={answers} 
@@ -1134,7 +1151,7 @@ function GameContent() {
                 roundType={currentRound?.type}
               />
             </div>
-            <div className="flex-1 min-h-0 lg:block hidden">
+            <div className={`flex-1 min-h-0 ${activeSidebarTab === 'chat' ? 'block' : 'hidden lg:block'}`}>
               <ChatPanel roomCode={code} />
             </div>
           </div>
