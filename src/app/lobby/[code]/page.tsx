@@ -48,6 +48,7 @@ function LobbyContent() {
   const [intervalTime, setIntervalTime] = useState(8);
   const [includeAudio, setIncludeAudio] = useState(true);
   const [includeSurprise, setIncludeSurprise] = useState(false);
+  const [includeCustom, setIncludeCustom] = useState(false);
   const [onlyAudio, setOnlyAudio] = useState(false);
 
   // Redirect when game starts
@@ -79,6 +80,7 @@ function LobbyContent() {
           intervalTime: intervalTime,
           includeAudio: includeAudio,
           includeSurprise: includeSurprise,
+          includeCustom: includeCustom,
           onlyAudio: onlyAudio
         }),
       });
@@ -306,11 +308,28 @@ function LobbyContent() {
                       )}
                     </div>
 
-                    
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-display text-muted-foreground tracking-widest uppercase cursor-pointer" htmlFor="custom-toggle">
+                        Perguntas Personalizadas
+                      </label>
+                      {isHost ? (
+                        <input 
+                          id="custom-toggle"
+                          type="checkbox"
+                          className="w-5 h-5 accent-neon-yellow bg-background border-border rounded cursor-pointer"
+                          checked={includeCustom}
+                          onChange={(e) => setIncludeCustom(e.target.checked)}
+                        />
+                      ) : (
+                        <div className={`w-3 h-3 rounded-full ${(room as any)?.include_custom ? "bg-neon-yellow shadow-[0_0_8px_rgba(255,190,0,0.5)]" : "bg-muted-foreground/30"}`} />
+                      )}
+                    </div>
+
                     {!isHost && (
                       <p className="text-[10px] text-muted-foreground/60 italic">
                         {(room as any)?.include_audio ? "Desafio musical ativado!" : "Apenas imagens e texto"}
                         {(room as any)?.include_surprise && " • Rodada surpresa habilitada!"}
+                        {(room as any)?.include_custom && " • Perguntas personalizadas incluídas!"}
                       </p>
                     )}
                   </div>

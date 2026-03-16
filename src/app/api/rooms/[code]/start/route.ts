@@ -103,6 +103,16 @@ const SAMPLE_IMAGES = [
   },
 ]
 
+// Helper for Fisher-Yates Shuffle
+const shuffle = (array: any[]) => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+};
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -111,7 +121,7 @@ export async function POST(
     const { code } = await params
     const supabase = createAdminClient()
     const body = await request.json()
-    const { sessionId, maxScore, difficulty, timePerRound, intervalTime, includeAudio, includeSurprise, onlyAudio } = body
+    const { sessionId, maxScore, difficulty, timePerRound, intervalTime, includeAudio, includeSurprise, includeCustom, onlyAudio } = body
 
     const { data: room, error: roomError } = await supabase
       .from('rooms')
@@ -149,15 +159,9 @@ export async function POST(
     let roundsData: any[] = [];
 
     // 1. Fetch random questions from the Supabase Pool
-    let sourceQuestions: {
-      url: string;
-      audio_url: string;
-      type: string;
-      question: string;
-      answer: string;
-      hints: string[];
-      alternative_answers: string[];
-    }[] = []
+    let sourceQuestions: any[] = []
+    let customQuestionsPool: any[] = []
+
     try {
       const { data: poolData, error: poolError } = await supabase.from('question_pool').select('*')
 
@@ -174,14 +178,9 @@ export async function POST(
           filteredPool = filteredPool.filter(q => q.type !== 'audio')
         }
 
-          // Helper for Fisher-Yates Shuffle
-          const shuffle = (array: any[]) => {
-            for (let i = array.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [array[i], array[j]] = [array[j], array[i]];
-            }
-            return array;
-          };
+        // Always filter out 'custom' type from the main pool to avoid random appearance
+        customQuestionsPool = shuffle(filteredPool.filter(q => q.type === 'custom'))
+        filteredPool = filteredPool.filter(q => q.type !== 'custom')
 
           // Initial Shuffle
           filteredPool = shuffle(filteredPool);
@@ -239,8 +238,8 @@ export async function POST(
         sourceQuestions = SAMPLE_IMAGES.sort(() => Math.random() - 0.5)
       }
 
-      // Create more rounds initially (at least 20 or all available)
-      const numRounds = Math.min(20, sourceQuestions.length)
+      // Create more rounds initially (at least 100 or all available)
+      const numRounds = Math.min(100, sourceQuestions.length)
       const roundsToCreate = sourceQuestions.slice(0, numRounds)
 
       roundsData = roundsToCreate.map((q, index) => ({
@@ -254,6 +253,42 @@ export async function POST(
         answer_hints: [...(q.hints || []), ...(q.alternative_answers || [])],
         status: 'pending'
       }))
+
+      // --- NEW: Inject Custom Questions if enabled ---
+      if (includeCustom && customQuestionsPool.length > 0) {
+        let currentPos = 0;
+        let customIdx = 0;
+
+        while (customIdx < customQuestionsPool.length) {
+          // Interval between 12 and 20 questions
+          const interval = Math.floor(Math.random() * (20 - 12 + 1)) + 12;
+          currentPos += interval;
+
+          if (currentPos > roundsData.length) break;
+
+          const q = customQuestionsPool[customIdx++];
+          
+          // Increment round numbers for rounds after the injection position
+          for (let i = currentPos - 1; i < roundsData.length; i++) {
+            roundsData[i].round_number++;
+          }
+
+          roundsData.splice(currentPos - 1, 0, {
+            room_id: room.id,
+            round_number: currentPos,
+            image_url: q.image_url || '',
+            audio_url: q.audio_url || '',
+            type: 'custom',
+            question: q.question,
+            answer: q.primary_answer,
+            answer_hints: [...(q.hints || []), ...(q.alternative_answers || [])],
+            status: 'pending'
+          });
+
+          // Stay at currentPos because we inserted one
+          currentPos++; 
+        }
+      }
 
       // --- NEW: Inject Surprise Round if enabled ---
       if (includeSurprise) {
@@ -306,6 +341,7 @@ export async function POST(
         difficulty: difficulty,
         include_audio: includeAudio,
         include_surprise: includeSurprise,
+        include_custom: includeCustom,
         only_audio: onlyAudio,
         updated_at: new Date().toISOString()
       })

@@ -167,7 +167,10 @@ function GameContent() {
     if (currentRound?.status === 'active' && !showRoundResult && preGameCountdown === null) {
       // Focus input when a new round starts or round result is closed
       const timer = setTimeout(() => {
-        inputRef.current?.focus();
+        if (inputRef.current) {
+          inputRef.current.focus({ preventScroll: true });
+          inputRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
+        }
       }, 300);
       return () => clearTimeout(timer);
     }
@@ -486,7 +489,10 @@ function GameContent() {
           setAnswered(false);
           // Small delay to ensure React has updated the DOM before focusing
           setTimeout(() => {
-            inputRef.current?.focus();
+            if (inputRef.current) {
+              inputRef.current.focus({ preventScroll: true });
+              inputRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
+            }
           }, 50);
         }
         setAnswer(""); // Always clear input
@@ -496,7 +502,10 @@ function GameContent() {
       setAnswer("");
       setAnswered(false);
       setTimeout(() => {
-        inputRef.current?.focus();
+        if (inputRef.current) {
+          inputRef.current.focus({ preventScroll: true });
+          inputRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
+        }
       }, 50);
     } finally {
       clearTimeout(timeoutId);
@@ -1102,7 +1111,7 @@ function GameContent() {
                 onKeyDown={(e) => e.key === "Enter" && submitAnswer()}
                 placeholder="Sua resposta..."
                 disabled={feedback === "correct" || showRoundResult || preGameCountdown !== null}
-                className={`flex-1 bg-input border rounded-xl px-4 py-3 font-body text-foreground placeholder:text-muted-foreground focus:outline-none transition-all ${feedback === "correct"
+                className={`flex-1 bg-input border rounded-xl px-4 py-3 font-body text-foreground placeholder:text-muted-foreground focus:outline-none transition-all scroll-mb-2 ${feedback === "correct"
                   ? "border-neon-green neon-border-cyan"
                   : feedback === "wrong"
                     ? "border-destructive shake-wrong"

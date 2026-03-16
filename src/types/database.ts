@@ -16,6 +16,7 @@ export interface Room {
   difficulty?: string
   include_audio?: boolean
   include_surprise?: boolean
+  include_custom?: boolean
   created_at: string
   updated_at: string
 }

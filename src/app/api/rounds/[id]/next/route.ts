@@ -129,6 +129,10 @@ export async function POST(
                     query = query.neq('type', 'audio')
                 }
 
+                if (!currentRound.room.include_custom) {
+                    query = query.neq('type', 'custom')
+                }
+
                 const { data: poolData, error: poolError } = await query;
 
                 if (poolError) throw poolError;
