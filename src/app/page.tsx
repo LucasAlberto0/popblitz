@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import { Gamepad2, LogIn, RefreshCw } from "lucide-react";
+import Image from "next/image";
 
 export default function HomePage() {
   const router = useRouter();
@@ -36,26 +37,53 @@ export default function HomePage() {
         transition={{ duration: 0.8, ease: "easeOut" }}
         className="relative z-10 text-center px-4 max-w-lg w-full"
       >
-        {/* Logo */}
+        {/* Logo Section */}
         <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.2, duration: 0.6, type: "spring" }}
-          className="mb-8"
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="mb-12 flex flex-col items-center"
         >
-          <h1 className="font-display text-5xl md:text-7xl font-black gradient-text leading-tight">
-            POP
-            <br />
-            BLITZ
-          </h1>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="text-muted-foreground font-ui text-lg mt-3 tracking-widest uppercase"
+          {/* Animated Image Icon - Larger than title */}
+          <motion.div
+            animate={{ 
+              y: [0, -10, 0],
+            }}
+            transition={{ 
+              duration: 4,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            className="relative w-64 h-64 md:w-80 md:h-80"
           >
-            Adivinhe rápido. Vença todos.
-          </motion.p>
+            <Image
+              src="/images/logoPopBlitzAt.png"
+              alt="Pop Blitz Icon"
+              fill
+              className="object-contain drop-shadow-[0_0_30px_rgba(255,0,255,0.4)]"
+              priority
+            />
+          </motion.div>
+
+          {/* Text Logo - Proportional to Icon */}
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+            className="text-center -mt-12 md:-mt-16"
+          >
+            <h1 className="font-display text-5xl md:text-6xl font-black gradient-text leading-[0.85] tracking-tighter">
+              POP BLITZ
+            </h1>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              className="text-muted-foreground font-ui text-sm md:text-base mt-2 tracking-[0.3em] uppercase opacity-80"
+            >
+              Adivinhe rápido. Vença todos.
+            </motion.p>
+          </motion.div>
         </motion.div>
 
         {/* Buttons */}

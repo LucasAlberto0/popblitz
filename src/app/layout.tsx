@@ -8,6 +8,9 @@ import { Toaster as SonnerComponent } from "@/components/ui/sonner";
 export const metadata: Metadata = {
   title: "POP BLITZ - Adivinhe rápido. Vença todos.",
   description: "Jogo multiplayer de adivinhação por imagem com cultura pop",
+  icons: {
+    icon: "/images/logoPopBlitzAt.png",
+  },
 };
 
 export default function RootLayout({
