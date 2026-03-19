@@ -4,7 +4,7 @@ import { useState, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
-import { Copy, Check, Crown, Loader2, Play } from "lucide-react";
+import { Copy, Check, Crown, Loader2, Play, RefreshCw } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 import ChatPanel from "@/components/game/ChatPanel";
 import AvatarDisplay from "@/components/game/AvatarDisplay";
@@ -50,6 +50,7 @@ function LobbyContent() {
   const [includeSurprise, setIncludeSurprise] = useState(false);
   const [includeCustom, setIncludeCustom] = useState(false);
   const [onlyAudio, setOnlyAudio] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const [now, setNow] = useState(Date.now());
 
@@ -152,7 +153,9 @@ function LobbyContent() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        setIsSyncing(true);
         sendHeartbeat();
+        setTimeout(() => setIsSyncing(false), 800);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -255,6 +258,28 @@ function LobbyContent() {
   return (
     <div className="relative min-h-screen gradient-bg-animated px-4 py-8 flex flex-col items-center">
       <ParticleBackground />
+
+      <AnimatePresence>
+        {isSyncing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-background/40 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex flex-col items-center gap-4 bg-black/20 p-8 rounded-2xl border border-primary/20 shadow-2xl transition-all"
+            >
+              <RefreshCw className="w-10 h-10 text-primary animate-spin" />
+              <span className="font-display text-primary tracking-widest uppercase text-sm">
+                Sincronizando...
+              </span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="relative z-10 max-w-5xl w-full">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

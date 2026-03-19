@@ -7,7 +7,7 @@ import TimerRing from "@/components/game/TimerRing";
 import RankingList from "@/components/game/RankingList";
 import ChatPanel from "@/components/game/ChatPanel";
 import AvatarDisplay from "@/components/game/AvatarDisplay";
-import { Loader2, Settings, X, Crown, Info, Copy, Check, Volume2, VolumeX, XCircle } from "lucide-react";
+import { Loader2, Settings, X, Crown, Info, Copy, Check, Volume2, VolumeX, XCircle, RefreshCw } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 
 function GameContent() {
@@ -25,6 +25,7 @@ function GameContent() {
   const [roundResult, setRoundResult] = useState<any>(null);
   const [preGameCountdown, setPreGameCountdown] = useState<number | null>(null);
   const [resultCountdown, setResultCountdown] = useState<number | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   const startTimeRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioPlayedRef = useRef<boolean>(false);
@@ -110,7 +111,9 @@ function GameContent() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        setIsSyncing(true);
         sendHeartbeat();
+        setTimeout(() => setIsSyncing(false), 800);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -664,6 +667,27 @@ function GameContent() {
 
   return (
     <div className="relative min-h-screen lg:h-[100dvh] bg-background overflow-y-auto lg:overflow-hidden flex flex-col custom-scrollbar">
+      <AnimatePresence>
+        {isSyncing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-background/40 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex flex-col items-center gap-4 bg-black/20 p-8 rounded-2xl border border-primary/20 shadow-2xl transition-all"
+            >
+              <RefreshCw className="w-10 h-10 text-primary animate-spin" />
+              <span className="font-display text-primary tracking-widest uppercase text-sm">
+                Sincronizando...
+              </span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Hidden Asset Preloader */}
       {Preloader}
       <div className="relative z-10 lg:flex-1 flex flex-col lg:flex-row lg:min-h-0 lg:h-full lg:overflow-hidden overflow-y-auto lg:custom-scrollbar">
