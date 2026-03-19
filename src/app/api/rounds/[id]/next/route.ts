@@ -22,41 +22,34 @@ export async function POST(
             return NextResponse.json({ error: 'Round not found' }, { status: 404 })
         }
 
-        // 2. Security check
-        /*
-        if (currentRound.room.host_id !== sessionId) {
-            return NextResponse.json({ error: 'Only host can trigger next round' }, { status: 403 })
-        }
-        */
+        const nextRoundNumber = currentRound.round_number + 1
 
-        // 3. Check for a winner (>= 120 points)
+        // 2. Idempotency Check: See if next round is already active
+        const { data: alreadyActive } = await supabase
+            .from('rounds')
+            .select('*')
+            .eq('room_id', currentRound.room.id)
+            .eq('round_number', nextRoundNumber)
+            .eq('status', 'active')
+            .single()
+
+        if (alreadyActive) {
+            return NextResponse.json({
+                success: true,
+                nextRound: alreadyActive
+            })
+        }
+
+        // 3. Check for a winner (>= currentRound.room.max_score points)
+        const maxScoreLimit = currentRound.room.max_score || 120
         const { data: winner } = await supabase
             .from('players')
             .select('*')
             .eq('room_id', currentRound.room.id)
-            .gte('score', 120)
+            .gte('score', maxScoreLimit)
             .order('score', { ascending: false })
             .limit(1)
             .single()
-
-        if (winner) {
-            // Finish game if someone reached 120 points
-            await supabase
-                .from('rooms')
-                .update({
-                    status: 'finished',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', currentRound.room.id)
-
-            return NextResponse.json({
-                success: true,
-                gameFinished: true,
-                winner
-            })
-        }
-
-        const nextRoundNumber = currentRound.round_number + 1
 
         // 4. Find next round
         const { data: nextRoundExist } = await supabase

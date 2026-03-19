@@ -132,20 +132,39 @@ function GameContent() {
     }
   };
 
+  // --- Result Countdown Sync ---
   useEffect(() => {
-    if (showRoundResult && (resultCountdown === null || resultCountdown === 0)) {
+    if (!showRoundResult || !currentRound || currentRound.status !== 'finished') {
       setResultCountdown(room?.interval_time || 8);
-    } else if (!showRoundResult) {
-      setResultCountdown(null);
+      return;
     }
-  }, [showRoundResult]);
 
-  useEffect(() => {
-    if (resultCountdown !== null && resultCountdown > 0 && showRoundResult) {
-      const timer = setTimeout(() => setResultCountdown(resultCountdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [resultCountdown, showRoundResult]);
+    const updateResultTimer = () => {
+      if (currentRound.ended_at) {
+        const endedAt = new Date(currentRound.ended_at).getTime();
+        const now = Date.now();
+        const elapsed = Math.floor((now - endedAt) / 1000);
+        const limit = room?.interval_time || 8;
+        const remaining = Math.max(0, limit - elapsed);
+        
+        setResultCountdown(remaining);
+
+        // Auto-next round check (Any client can trigger)
+        if (remaining === 0 && currentRound.status === 'finished') {
+          fetch(`/api/rounds/${currentRound.id}/next`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: playerData?.sessionId }),
+          }).catch(() => {});
+        }
+      }
+    };
+
+    const intervalId = setInterval(updateResultTimer, 1000);
+    updateResultTimer();
+
+    return () => clearInterval(intervalId);
+  }, [showRoundResult, currentRound?.id, currentRound?.status, room?.interval_time, playerData?.sessionId]);
 
   useEffect(() => {
     if (currentRound?.round_number === 1 && preGameCountdown === null && !showRoundResult && !answered) {
@@ -315,52 +334,60 @@ function GameContent() {
   }, [room?.status, code, router]);
 
 
+  // --- NEW: Sync Timer Logic (Calculated from started_at) ---
   useEffect(() => {
-    if (!currentRound || showRoundResult || timeLeft <= 0) return;
+    if (!currentRound || showRoundResult) return;
 
-    const timer = setInterval(() => {
+    const updateTimer = () => {
       if (currentRound && currentRound.started_at) {
         const serverStart = new Date(currentRound.started_at).getTime();
         const now = Date.now();
         let elapsedSeconds = Math.floor((now - serverStart) / 1000);
         
-        // Offset 7 seconds for round 1 due to Pre-Game Countdown (6 to 0, plus 1s showing JÁ)
+        // Offset 7 seconds for round 1 due to Pre-Game Countdown
         if (currentRound.round_number === 1) {
           elapsedSeconds -= 7;
         }
 
         const limit = currentRound.type === 'surprise' ? 50 : (room?.time_per_round || 30);
         
-        // --- NEW: Handle Raffle Pause ---
+        // Handle Raffle Pause for surprise rounds
         if (isSurpriseRound && isRaffling) {
           setTimeLeft(limit);
           return;
         }
 
-        // Subtract raffle duration (approx 4.5s: 2.5s steps + 1.5s delay + 0.5s safety) 
-        // to prevent jump when raffle ends
+        // Subtract raffle duration
         if (isSurpriseRound && !isRaffling) {
           elapsedSeconds -= 4; 
         }
-        // -------------------------------
         
-        if (elapsedSeconds < 0) {
-          setTimeLeft(limit);
-          return;
-        }
-
         const remaining = Math.max(0, limit - elapsedSeconds);
-
         setTimeLeft(remaining);
 
-        if (remaining === 0 && !showRoundResult) {
+        // Auto-finish check (Any client can trigger, API is idempotent)
+        if (remaining === 0 && currentRound.status === 'active' && !showRoundResult) {
           handleTimeUp();
         }
       }
-    }, 500);
+    };
 
-    return () => clearInterval(timer);
-  }, [currentRound, room?.time_per_round, showRoundResult, isRaffling]);
+    const timer = setInterval(updateTimer, 500);
+    updateTimer(); // Run immediately
+
+    // Tab-out resilience: Refresh timer when user comes back
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        updateTimer();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentRound?.id, currentRound?.status, room?.time_per_round, showRoundResult, isRaffling]);
 
   useEffect(() => {
     if (currentRound) {
@@ -399,15 +426,7 @@ function GameContent() {
               }
             }
 
-            if (isHost) {
-              setTimeout(async () => {
-                await fetch(`/api/rounds/${currentRound.id}/next`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ sessionId: playerData?.sessionId }),
-                });
-              }, (room?.interval_time || 8) * 1000);
-            }
+            // Result transition is now handled by the synchronized useEffect at the top
           } catch (err) {
             // Silently fail or handle gracefully in UI
           }
@@ -430,17 +449,16 @@ function GameContent() {
     }
   }, [currentRound, isHost, room?.time_per_round, showRoundResult, roundResult?.round?.id, playerData]);
 
-
   const handleTimeUp = async () => {
-    if (isHost && currentRound && !showRoundResult) {
+    if (currentRound && currentRound.status === 'active' && !showRoundResult) {
       await fetch(`/api/rounds/${currentRound.id}/finish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: playerData?.sessionId }),
       });
     }
-    // Non-hosts just wait for the Realtime 'finished' event
-  };  const submitAnswer = async (overriddenAnswer?: string) => {
+  };
+;  const submitAnswer = async (overriddenAnswer?: string) => {
     const currentAnswer = overriddenAnswer || answer.trim();
     if (!currentAnswer || answered || !currentRound || showRoundResult || feedback === "correct") return;
 
