@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PlayerCard from "./PlayerCard";
 import { Player, RoundAnswer } from "@/types/database";
@@ -14,6 +15,13 @@ interface RankingListProps {
 }
 
 const RankingList = ({ players, currentPlayerId, answers, maxScore, roundStatus, roundType }: RankingListProps) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   const sorted = [...players].sort((a, b) => b.score - a.score);
 
   return (
@@ -30,6 +38,8 @@ const RankingList = ({ players, currentPlayerId, answers, maxScore, roundStatus,
             const lastGuess = playerAnswers[playerAnswers.length - 1]?.answer;
             const isSpectator = player.status === 'ready';
             const isCurrent = player.id === currentPlayerId;
+            const lastSeen = player.last_seen_at ? new Date(player.last_seen_at).getTime() : 0;
+            const isDisconnected = player.last_seen_at ? (now - lastSeen > 40000) : false;
 
             // Special logic for boolean rounds: hide feedback until finished
             const hideFeedback = roundType === 'boolean' && roundStatus !== 'finished';
@@ -50,6 +60,7 @@ const RankingList = ({ players, currentPlayerId, answers, maxScore, roundStatus,
                 lastGuess={showLastGuess}
                 isCurrentPlayer={player.id === currentPlayerId}
                 isSpectator={isSpectator}
+                isDisconnected={isDisconnected}
               />
             );
           })}

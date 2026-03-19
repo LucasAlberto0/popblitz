@@ -290,34 +290,44 @@ export async function POST(
         }
       }
 
-      // --- NEW: Inject Surprise Round if enabled ---
-      if (includeSurprise) {
-        // Pick a random position between 6 and 12 (or less if pool is small)
-        const surprisePos = Math.min(
-          Math.floor(Math.random() * 7) + 6, 
-          roundsData.length
-        );
-        
-        // Increment round numbers for rounds after the surprise position
-        for (let i = surprisePos - 1; i < roundsData.length; i++) {
-          roundsData[i].round_number++;
+        // --- NEW: Inject Surprise Round if enabled ---
+        if (includeSurprise) {
+          // Pick a random position between 6 and 12 (or less if pool is small)
+          const surprisePos = Math.min(
+            Math.floor(Math.random() * 7) + 6,
+            roundsData.length
+          );
+
+          // Increment round numbers for rounds after the surprise position
+          for (let i = surprisePos - 1; i < roundsData.length; i++) {
+            roundsData[i].round_number++;
+          }
+
+          // Filter for active players only (seen in last 15s)
+          const now = Date.now();
+          const activePlayers = players.filter(p => {
+            if (!p.last_seen_at) return true;
+            return (now - new Date(p.last_seen_at).getTime()) < 15000;
+          });
+
+          // Fallback to all players if no one is "active" (unlikely at start)
+          const poolToPickFrom = activePlayers.length > 0 ? activePlayers : players;
+          const luckyPlayer = poolToPickFrom[Math.floor(Math.random() * poolToPickFrom.length)];
+
+          // Insert the surprise round
+          roundsData.splice(surprisePos - 1, 0, {
+            room_id: room.id,
+            round_number: surprisePos,
+            image_url: '',
+            audio_url: '',
+            type: 'surprise',
+            question: 'Rodada Surpresa! Um jogador será sorteado para roubar pontos.',
+            answer: 'Surpresa',
+            answer_hints: [],
+            status: 'pending',
+            lucky_player_id: luckyPlayer.id
+          });
         }
-        
-        // Insert the surprise round
-        const luckyPlayer = players[Math.floor(Math.random() * players.length)];
-        roundsData.splice(surprisePos - 1, 0, {
-          room_id: room.id,
-          round_number: surprisePos,
-          image_url: '',
-          audio_url: '',
-          type: 'surprise',
-          question: 'Rodada Surpresa! Um jogador será sorteado para roubar pontos.',
-          answer: 'Surpresa',
-          answer_hints: [],
-          status: 'pending',
-          lucky_player_id: luckyPlayer.id
-        });
-      }
       // --------------------------------------------
 
       const { error: roundsError } = await supabase

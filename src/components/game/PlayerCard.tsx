@@ -14,6 +14,7 @@ interface PlayerCardProps {
   isCorrect?: boolean;
   lastGuess?: string;
   isSpectator?: boolean;
+  isDisconnected?: boolean;
 }
 
 const rankColors = [
@@ -32,7 +33,8 @@ const PlayerCard = ({
   highlight,
   isCorrect,
   lastGuess,
-  isSpectator
+  isSpectator,
+  isDisconnected
 }: PlayerCardProps) => {
   return (
     <motion.div
@@ -40,7 +42,7 @@ const PlayerCard = ({
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isCurrentPlayer ? "bg-primary/10 border border-primary/30" : "glass-card bg-background/40"
-        } ${highlight ? "neon-border-magenta" : ""} ${isCorrect ? "border-neon-green/40 shadow-[0_0_10px_rgba(57,255,20,0.1)]" : ""} ${isSpectator ? "opacity-60 saturate-50" : ""}`}
+        } ${highlight ? "neon-border-magenta" : ""} ${isCorrect ? "border-neon-green/40 shadow-[0_0_10px_rgba(57,255,20,0.1)]" : ""} ${isSpectator ? "opacity-60 saturate-50" : ""} ${isDisconnected ? "opacity-40 grayscale" : ""}`}
     >
       <div className="relative">
         <div className={`w-12 h-12 rounded-lg ${isCorrect ? "bg-neon-green/10" : "bg-muted/30"} flex items-center justify-center overflow-hidden border border-border/50`}>
@@ -63,6 +65,11 @@ const PlayerCard = ({
               >
                 👑
               </motion.span>
+            )}
+            {isDisconnected && (
+              <span className="text-[8px] bg-destructive/20 text-destructive border border-destructive/30 px-1 rounded font-display uppercase tracking-wider">
+                DESCONECTADO
+              </span>
             )}
           </p>
         </div>

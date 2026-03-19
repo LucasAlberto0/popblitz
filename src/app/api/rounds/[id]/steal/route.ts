@@ -39,6 +39,13 @@ export async function POST(
        return NextResponse.json({ error: 'Invalid session/players' }, { status: 403 })
     }
 
+    // --- NEW: Victim connection check ---
+    const now = Date.now();
+    const victimLastSeen = victim.last_seen_at ? new Date(victim.last_seen_at).getTime() : 0;
+    if (victim.last_seen_at && (now - victimLastSeen) > 15000) {
+       return NextResponse.json({ error: 'Jogador desconectado não pode ser alvo de roubo' }, { status: 400 })
+    }
+
     if (thief.id === victim.id) {
        return NextResponse.json({ error: 'Cannot steal from yourself' }, { status: 400 })
     }

@@ -15,9 +15,10 @@ export async function POST(
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Verify session matches to prevent spoofing
     const { data: player, error: playerError } = await supabase
       .from('players')
-      .select('*')
+      .select('session_id')
       .eq('id', playerId)
       .single()
 
@@ -29,10 +30,10 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid session' }, { status: 403 })
     }
 
+    // Update last_seen_at and ensure status is playing/ready
     const { error: updateError } = await supabase
       .from('players')
       .update({ 
-        status: 'playing',
         last_seen_at: new Date().toISOString()
       })
       .eq('id', playerId)
@@ -41,7 +42,7 @@ export async function POST(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error joining game:', error)
-    return NextResponse.json({ error: 'Failed to join game' }, { status: 500 })
+    console.error('Heartbeat error:', error)
+    return NextResponse.json({ error: 'Failed to process heartbeat' }, { status: 500 })
   }
 }

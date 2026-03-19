@@ -51,6 +51,13 @@ function LobbyContent() {
   const [includeCustom, setIncludeCustom] = useState(false);
   const [onlyAudio, setOnlyAudio] = useState(false);
 
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Redirect when game starts
   useEffect(() => {
     if (room?.status === 'playing') {
@@ -63,6 +70,126 @@ function LobbyContent() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // 1. Sync local states with room data when it changes (for non-hosts or initial load)
+  useEffect(() => {
+    if (room) {
+      // If we're not the host, we MUST follow the room rules from DB
+      if (!isHost) {
+        setMaxScore(room.max_score || 120);
+        setDifficulty((room as any).difficulty || "all");
+        setTimePerRound(room.time_per_round || 20);
+        setIntervalTime((room as any).interval_time || 8);
+        setIncludeAudio((room as any).include_audio ?? true);
+        setIncludeSurprise((room as any).include_surprise ?? false);
+        setIncludeCustom((room as any).include_custom ?? false);
+        setOnlyAudio((room as any).only_audio ?? false);
+      }
+    }
+  }, [room, isHost]);
+
+  // 2. Host: Push rule changes to DB with debounce
+  useEffect(() => {
+    if (!isHost || !playerData || !room) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        await fetch(`/api/rooms/${code}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: playerData.sessionId,
+            maxScore,
+            difficulty,
+            includeAudio,
+            includeSurprise,
+            includeCustom,
+            onlyAudio,
+            timePerRound,
+            intervalTime
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to sync rules:", err);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [isHost, maxScore, difficulty, includeAudio, includeSurprise, includeCustom, onlyAudio, timePerRound, intervalTime, code, playerData]);
+
+  // 3. Heartbeat Logic (Web Worker to avoid background throttling)
+  useEffect(() => {
+    if (!playerData?.id || !code) return;
+
+    const sendHeartbeat = async () => {
+      try {
+        await fetch(`/api/players/${playerData.id}/heartbeat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: playerData.sessionId }),
+        });
+      } catch (err) {
+        console.error("Heartbeat failed:", err);
+      }
+    };
+
+    const workerCode = `
+      let timer = null;
+      self.onmessage = (e) => {
+        if (e.data === 'start') {
+          timer = setInterval(() => self.postMessage('tick'), 12000);
+        } else if (e.data === 'stop') {
+          clearInterval(timer);
+        }
+      };
+    `;
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const worker = new Worker(URL.createObjectURL(blob));
+
+    worker.onmessage = () => sendHeartbeat();
+    worker.postMessage('start');
+    sendHeartbeat();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        sendHeartbeat();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      worker.postMessage('stop');
+      worker.terminate();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [playerData?.id, playerData?.sessionId, code]);
+
+  // 4. Auto-kick Logic (Host only)
+  useEffect(() => {
+    if (!isHost || !playerData?.id || !code) return;
+
+    const checkKicks = async () => {
+      const now = Date.now();
+      for (const player of players) {
+        if (player.id !== playerData.id && player.last_seen_at) {
+          const lastSeen = new Date(player.last_seen_at).getTime();
+          const inactiveSecs = (now - lastSeen) / 1000;
+          
+          if (inactiveSecs > 65) { // Threshold for 12s heartbeats (5x margin + buffer)
+            console.log(`Lobby: Host kicking inactive player: ${player.name}`);
+            fetch(`/api/players/${player.id}/kick`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId: playerData.sessionId }),
+            }).catch(() => {});
+          }
+        }
+      }
+    };
+
+    const kickInterval = setInterval(checkKicks, 30000);
+    return () => clearInterval(kickInterval);
+  }, [isHost, players, playerData?.id, playerData?.sessionId, code]);
 
   const handleStartGame = async () => {
     setIsStarting(true);
@@ -153,28 +280,40 @@ function LobbyContent() {
             <div className="glass-card p-6">
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                 <AnimatePresence>
-                  {players.map((p: any, i: number) => (
-                    <motion.div
-                      key={p.id}
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ type: "spring", delay: i * 0.05 }}
-                      className="glass-card p-4 text-center relative min-h-[110px] flex flex-col justify-center items-center"
-                    >
-                      {p.is_host && (
-                        <Crown size={14} className="absolute top-2 right-2 text-neon-yellow" />
-                      )}
+                  {players.map((p: any, i: number) => {
+                    const lastSeen = p.last_seen_at ? new Date(p.last_seen_at).getTime() : 0;
+                    const isDisconnected = p.last_seen_at ? (now - lastSeen > 40000) : false;
+                    
+                    return (
                       <motion.div
-                        animate={{ y: [0, -4, 0] }}
-                        transition={{ duration: 2, repeat: Infinity, delay: i * 0.3 }}
-                        className="mb-2 flex-grow flex items-center justify-center"
+                        key={p.id}
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ type: "spring", delay: i * 0.05 }}
+                        className={`glass-card p-4 text-center relative min-h-[110px] flex flex-col justify-center items-center transition-opacity ${isDisconnected ? "opacity-50 grayscale" : ""}`}
                       >
-                        <AvatarDisplay avatarId={p.avatar} size={36} fallbackText={p.name} />
+                        {p.is_host && (
+                          <Crown size={14} className="absolute top-2 right-2 text-neon-yellow" />
+                        )}
+                        <motion.div
+                          animate={{ y: [0, -4, 0] }}
+                          transition={{ duration: 2, repeat: Infinity, delay: i * 0.3 }}
+                          className="mb-2 flex-grow flex items-center justify-center"
+                        >
+                          <AvatarDisplay avatarId={p.avatar} size={36} fallbackText={p.name} />
+                        </motion.div>
+                        <p className="font-ui font-semibold text-xs truncate w-full" title={p.name}>{p.name}</p>
+                        
+                        {isDisconnected ? (
+                          <span className="text-[8px] bg-destructive/20 text-destructive border border-destructive/30 px-1 rounded font-display uppercase tracking-wider mt-2">
+                            DESCONECTADO
+                          </span>
+                        ) : (
+                          <div className={`w-2 h-2 rounded-full mt-2 ${p.status === 'ready' ? "bg-neon-green" : "bg-muted-foreground"}`} />
+                        )}
                       </motion.div>
-                      <p className="font-ui font-semibold text-xs truncate w-full" title={p.name}>{p.name}</p>
-                      <div className={`w-2 h-2 rounded-full mt-2 ${p.status === 'ready' ? "bg-neon-green" : "bg-muted-foreground"}`} />
-                    </motion.div>
-                  ))}
+                    );
+                  })}
                 </AnimatePresence>
 
                 {Array.from({ length: Math.max(0, (room?.max_players || 16) - players.length) }).slice(0, 10).map((_, i) => (
@@ -237,7 +376,7 @@ function LobbyContent() {
                       </select>
                     ) : (
                       <div className="w-full bg-secondary/50 border border-border/50 rounded-lg px-3 py-2 text-sm font-body text-primary/70">
-                        {room?.max_score || 120} pontos
+                        {maxScore} pontos
                       </div>
                     )}
                   </div>
@@ -261,11 +400,11 @@ function LobbyContent() {
                       </select>
                     ) : (
                       <div className="w-full bg-secondary/50 border border-border/50 rounded-lg px-3 py-2 text-sm font-body text-primary/70">
-                        {(room as any)?.difficulty === 'very_easy' ? 'Muito Fácil' : 
-                         (room as any)?.difficulty === 'easy' ? 'Fácil' : 
-                         (room as any)?.difficulty === 'medium' ? 'Médio' : 
-                         (room as any)?.difficulty === 'hard' ? 'Difícil' : 
-                         (room as any)?.difficulty === 'impossible' ? 'Impossível' : 'Todas'}
+                        {difficulty === 'very_easy' ? 'Muito Fácil' : 
+                         difficulty === 'easy' ? 'Fácil' : 
+                         difficulty === 'medium' ? 'Médio' : 
+                         difficulty === 'hard' ? 'Difícil' : 
+                         difficulty === 'impossible' ? 'Impossível' : 'Todas'}
                       </div>
                     )}
                   </div>
@@ -287,7 +426,7 @@ function LobbyContent() {
                           }}
                         />
                       ) : (
-                        <div className={`w-3 h-3 rounded-full ${(room as any)?.include_audio ? "bg-neon-cyan shadow-[0_0_8px_rgba(0,255,255,0.5)]" : "bg-muted-foreground/30"}`} />
+                        <div className={`w-3 h-3 rounded-full ${includeAudio ? "bg-neon-cyan shadow-[0_0_8px_rgba(0,255,255,0.5)]" : "bg-muted-foreground/30"}`} />
                       )}
                     </div>
 
@@ -304,7 +443,7 @@ function LobbyContent() {
                           onChange={(e) => setIncludeSurprise(e.target.checked)}
                         />
                       ) : (
-                        <div className={`w-3 h-3 rounded-full ${(room as any)?.include_surprise ? "bg-neon-magenta shadow-[0_0_8px_rgba(255,0,255,0.5)]" : "bg-muted-foreground/30"}`} />
+                        <div className={`w-3 h-3 rounded-full ${includeSurprise ? "bg-neon-magenta shadow-[0_0_8px_rgba(255,0,255,0.5)]" : "bg-muted-foreground/30"}`} />
                       )}
                     </div>
 
@@ -321,15 +460,15 @@ function LobbyContent() {
                           onChange={(e) => setIncludeCustom(e.target.checked)}
                         />
                       ) : (
-                        <div className={`w-3 h-3 rounded-full ${(room as any)?.include_custom ? "bg-neon-yellow shadow-[0_0_8px_rgba(255,190,0,0.5)]" : "bg-muted-foreground/30"}`} />
+                        <div className={`w-3 h-3 rounded-full ${includeCustom ? "bg-neon-yellow shadow-[0_0_8px_rgba(255,190,0,0.5)]" : "bg-muted-foreground/30"}`} />
                       )}
                     </div>
 
                     {!isHost && (
                       <p className="text-[10px] text-muted-foreground/60 italic">
-                        {(room as any)?.include_audio ? "Desafio musical ativado!" : "Apenas imagens e texto"}
-                        {(room as any)?.include_surprise && " • Rodada surpresa habilitada!"}
-                        {(room as any)?.include_custom && " • Perguntas personalizadas incluídas!"}
+                        {includeAudio ? "Desafio musical ativado!" : "Apenas imagens e texto"}
+                        {includeSurprise && " • Rodada surpresa habilitada!"}
+                        {includeCustom && " • Perguntas personalizadas incluídas!"}
                       </p>
                     )}
                   </div>
@@ -353,7 +492,7 @@ function LobbyContent() {
                       </select>
                     ) : (
                       <div className="w-full bg-secondary/50 border border-border/50 rounded-lg px-3 py-2 text-sm font-body text-primary/70">
-                        {room?.time_per_round || 20} Segundos
+                        {timePerRound} Segundos
                       </div>
                     )}
                     {isHost && includeAudio && (
@@ -380,7 +519,7 @@ function LobbyContent() {
                       </select>
                     ) : (
                       <div className="w-full bg-secondary/50 border border-border/50 rounded-lg px-3 py-2 text-sm font-body text-primary/70">
-                        {(room as any)?.interval_time || 8} Segundos
+                        {intervalTime} Segundos
                       </div>
                     )}
                   </div>

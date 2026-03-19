@@ -30,8 +30,9 @@ export interface Player {
   streak: number
   status: PlayerStatus
   is_host: boolean
-  order: number
+  player_order: number
   joined_at: string
+  last_seen_at: string | null
 }
 
 export interface Round {

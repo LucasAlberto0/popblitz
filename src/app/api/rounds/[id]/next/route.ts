@@ -67,12 +67,19 @@ export async function POST(
             if (nextRoundExist.type === 'surprise') {
                 const { data: players } = await supabase
                     .from('players')
-                    .select('id')
+                    .select('id, last_seen_at')
                     .eq('room_id', currentRound.room.id)
                     .eq('status', 'playing');
                 
                 if (players && players.length > 0) {
-                    luckyPlayerId = players[Math.floor(Math.random() * players.length)].id;
+                    const now = Date.now();
+                    const activePlayers = players.filter(p => {
+                        if (!p.last_seen_at) return true;
+                        return (now - new Date(p.last_seen_at).getTime()) < 15000;
+                    });
+
+                    const poolToPickFrom = activePlayers.length > 0 ? activePlayers : players;
+                    luckyPlayerId = poolToPickFrom[Math.floor(Math.random() * poolToPickFrom.length)].id;
                 }
             }
 

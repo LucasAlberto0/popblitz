@@ -75,6 +75,80 @@ function GameContent() {
   const isLuckyPlayer = currentRound?.lucky_player_id === playerData?.id;
   const isSurpriseRound = currentRound?.type === 'surprise';
 
+  // --- NEW: Heartbeat Logic (Web Worker to avoid background throttling) ---
+  useEffect(() => {
+    if (!playerData?.id || !code) return;
+
+    const sendHeartbeat = async () => {
+      try {
+        await fetch(`/api/players/${playerData.id}/heartbeat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: playerData.sessionId }),
+        });
+      } catch (err) {
+        console.error("Heartbeat failed:", err);
+      }
+    };
+
+    const workerCode = `
+      let timer = null;
+      self.onmessage = (e) => {
+        if (e.data === 'start') {
+          timer = setInterval(() => self.postMessage('tick'), 12000);
+        } else if (e.data === 'stop') {
+          clearInterval(timer);
+        }
+      };
+    `;
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const worker = new Worker(URL.createObjectURL(blob));
+
+    worker.onmessage = () => sendHeartbeat();
+    worker.postMessage('start');
+    sendHeartbeat(); // Immediate first beat
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        sendHeartbeat();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      worker.postMessage('stop');
+      worker.terminate();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [playerData?.id, playerData?.sessionId, code]);
+
+  // --- NEW: Auto-kick Logic (Host only) ---
+  useEffect(() => {
+    if (!isHost || !playerData?.id || !code) return;
+
+    const checkKicks = async () => {
+      const now = Date.now();
+      for (const player of players) {
+        if (player.id !== playerData.id && player.last_seen_at) {
+          const lastSeen = new Date(player.last_seen_at).getTime();
+          const inactiveSecs = (now - lastSeen) / 1000;
+          
+          if (inactiveSecs > 65) { // Threshold for 12s heartbeats (5x margin + buffer)
+            console.log(`Host kicking inactive player: ${player.name} (${inactiveSecs}s)`);
+            fetch(`/api/players/${player.id}/kick`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId: playerData.sessionId }),
+            }).catch(() => {});
+          }
+        }
+      }
+    };
+
+    const kickInterval = setInterval(checkKicks, 30000); // Check every 30s
+    return () => clearInterval(kickInterval);
+  }, [isHost, players, playerData?.id, playerData?.sessionId, code]);
+
   // --- NEW: Audio Unlock & Pooling Logic ---
   useEffect(() => {
     // Prevent multiple initializations
@@ -943,7 +1017,12 @@ function GameContent() {
                                    transition={{ delay: 0.5 }}
                                    className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-lg mt-2 z-10 px-3 pt-6 pb-12 max-h-[350px] overflow-y-auto custom-scrollbar"
                                 >
-                                   {players.filter(p => p.id !== playerData.id).map(p => (
+                                    {players.filter(p => {
+                                       const isSelf = p.id === playerData.id;
+                                       const lastSeen = p.last_seen_at ? new Date(p.last_seen_at).getTime() : 0;
+                                       const isDisconnected = p.last_seen_at ? (Date.now() - lastSeen > 10000) : false;
+                                       return !isSelf && !isDisconnected;
+                                    }).map(p => (
                                       <motion.button
                                          key={p.id}
                                          whileHover={{ 

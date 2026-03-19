@@ -88,14 +88,19 @@ export function useRealtimeRoom(roomCode: string) {
           table: "players",
           filter: `room_id=eq.${room.id}`,
         },
-        async () => {
-          const { data } = await supabase
-            .from("players")
-            .select("*")
-            .eq("room_id", room.id!)
-            .order("player_order", { ascending: true })
-
-          setPlayers(data || [])
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            setPlayers((prev) => [...prev, payload.new as Player]);
+          } else if (payload.eventType === "UPDATE") {
+            setPlayers((prev) => 
+              prev.map((p) => (p.id === payload.new.id ? { ...p, ...payload.new } : p))
+            );
+          } else if (payload.eventType === "DELETE") {
+            const oldId = payload.old?.id;
+            if (oldId) {
+              setPlayers((prev) => prev.filter((p) => p.id !== oldId));
+            }
+          }
         }
       )
       .subscribe()
