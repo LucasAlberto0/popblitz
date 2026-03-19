@@ -243,11 +243,27 @@ function GameContent() {
     return () => clearInterval(intervalId);
   }, [showRoundResult, currentRound?.id, currentRound?.status, room?.interval_time, playerData?.sessionId]);
 
+  // --- Pre-Game Countdown Logic with Refresh Persistence ---
+  const [hasCheckedInitialCountdown, setHasCheckedInitialCountdown] = useState(false);
+
   useEffect(() => {
-    if (currentRound?.round_number === 1 && preGameCountdown === null && !showRoundResult && !answered) {
-      setPreGameCountdown(6);
+    if (currentRound?.round_number === 1 && preGameCountdown === null && !showRoundResult && !answered && !hasCheckedInitialCountdown) {
+      if (currentRound.started_at) {
+        const serverStart = new Date(currentRound.started_at).getTime();
+        const now = Date.now();
+        const elapsed = (now - serverStart) / 1000;
+        
+        // Only show countdown if less than 5 seconds have passed
+        if (elapsed < 5) {
+          const remainingDelay = Math.max(0, Math.ceil(4 - elapsed));
+          setPreGameCountdown(remainingDelay);
+        }
+      } else {
+        setPreGameCountdown(4);
+      }
+      setHasCheckedInitialCountdown(true);
     }
-  }, [currentRound?.round_number]);
+  }, [currentRound?.round_number, currentRound?.started_at, showRoundResult, answered, preGameCountdown, hasCheckedInitialCountdown]);
 
   useEffect(() => {
     if (preGameCountdown !== null && preGameCountdown > 0) {
@@ -421,9 +437,9 @@ function GameContent() {
         const now = Date.now();
         let elapsedSeconds = Math.floor((now - serverStart) / 1000);
         
-        // Offset 7 seconds for round 1 due to Pre-Game Countdown
+        // Offset 5 seconds for round 1 due to Pre-Game Countdown (4s count + 1s JÁ)
         if (currentRound.round_number === 1) {
-          elapsedSeconds -= 7;
+          elapsedSeconds -= 5;
         }
 
         const limit = currentRound.type === 'surprise' ? 50 : (room?.time_per_round || 30);
@@ -439,7 +455,11 @@ function GameContent() {
           elapsedSeconds -= 4; 
         }
         
-        const remaining = Math.max(0, limit - elapsedSeconds);
+        // Cap the remaining time at the limit so the timer doesn't show 25 instead of 20 during the 5s pre-game animation
+        const remainingRaw = limit - elapsedSeconds;
+        let remaining = Math.min(limit, remainingRaw);
+        remaining = Math.max(0, remaining);
+        
         setTimeLeft(remaining);
 
         // Auto-finish check (Any client can trigger, API is idempotent)
