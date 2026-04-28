@@ -31,36 +31,23 @@ export async function POST(
 
     const { data: existingPlayers } = await supabase
       .from('players')
-      .select('id')
+      .select('*')
       .eq('room_id', room.id)
 
     if (existingPlayers && existingPlayers.length >= room.max_players) {
       return NextResponse.json({ error: 'Room is full' }, { status: 400 })
     }
 
-    // Check if player already exists in this room (Rejoin logic)
-    const { data: existingPlayer } = await supabase
-      .from('players')
-      .select('*')
-      .eq('room_id', room.id)
-      .eq('name', playerName.trim())
-      .single()
+    let finalName = playerName.trim()
+    const existingPlayer = existingPlayers?.find(p => p.name.toLowerCase() === finalName.toLowerCase())
 
     if (existingPlayer) {
-      // If we have an existing session ID from localStorage, it must match.
-      // If the player doesn't send one, but the name exists, we allow re-taking the slot 
-      // (This is okay for this type of game, or we could be stricter)
-      if (!existingSessionId || existingPlayer.session_id === existingSessionId) {
-         return NextResponse.json({
-           room,
-           player: {
-             ...existingPlayer,
-             sessionId: existingPlayer.session_id // Return the original session ID
-           }
-         })
+      // Se o nome já existe, sempre cria um novo jogador com " 2", " 3", etc.
+      let counter = 2;
+      while (existingPlayers?.some(p => p.name.toLowerCase() === `${finalName.toLowerCase()} ${counter}`)) {
+        counter++;
       }
-      
-      return NextResponse.json({ error: 'Este nome já está em uso nesta sala.' }, { status: 400 })
+      finalName = `${finalName} ${counter}`;
     }
 
     const sessionId = crypto.randomUUID()
@@ -71,7 +58,7 @@ export async function POST(
       .insert({
         room_id: room.id,
         session_id: sessionId,
-        name: playerName.trim(),
+        name: finalName,
         avatar: playerAvatar || '🎮',
         is_host: false,
         player_order: playerOrder,
