@@ -248,22 +248,10 @@ function GameContent() {
 
   useEffect(() => {
     if (currentRound?.round_number === 1 && preGameCountdown === null && !showRoundResult && !answered && !hasCheckedInitialCountdown) {
-      if (currentRound.started_at) {
-        const serverStart = new Date(currentRound.started_at).getTime();
-        const now = Date.now();
-        const elapsed = (now - serverStart) / 1000;
-        
-        // Only show countdown if less than 5 seconds have passed
-        if (elapsed < 5) {
-          const remainingDelay = Math.max(0, Math.ceil(4 - elapsed));
-          setPreGameCountdown(remainingDelay);
-        }
-      } else {
-        setPreGameCountdown(4);
-      }
+      setPreGameCountdown(5); // Fixa em 5 segundos
       setHasCheckedInitialCountdown(true);
     }
-  }, [currentRound?.round_number, currentRound?.started_at, showRoundResult, answered, preGameCountdown, hasCheckedInitialCountdown]);
+  }, [currentRound?.round_number, showRoundResult, answered, preGameCountdown, hasCheckedInitialCountdown]);
 
   useEffect(() => {
     if (preGameCountdown !== null && preGameCountdown > 0) {
@@ -437,9 +425,9 @@ function GameContent() {
         const now = Date.now();
         let elapsedSeconds = Math.floor((now - serverStart) / 1000);
         
-        // Offset 5 seconds for round 1 due to Pre-Game Countdown (4s count + 1s JÁ)
+        // Offset 6 seconds for round 1 due to Pre-Game Countdown (5s count + 1s JÁ)
         if (currentRound.round_number === 1) {
-          elapsedSeconds -= 5;
+          elapsedSeconds -= 6;
         }
 
         const limit = currentRound.type === 'surprise' ? 50 : (room?.time_per_round || 30);
@@ -567,7 +555,7 @@ function GameContent() {
     // Calculate time offset for first round
     let startTimeRound = new Date(currentRound.started_at!).getTime();
     if (currentRound.round_number === 1) {
-      startTimeRound += 7000;
+      startTimeRound += 6000;
     }
     const timeMs = Math.max(0, Date.now() - startTimeRound);
 
