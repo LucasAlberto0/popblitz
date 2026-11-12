@@ -4,13 +4,15 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import ParticleBackground from "@/components/game/ParticleBackground";
-import { Gamepad2, LogIn, RefreshCw } from "lucide-react";
+import { Gamepad2, LogIn, RefreshCw, HelpCircle } from "lucide-react";
 import Image from "next/image";
 import { wakeUpGameServer, getGameSocket } from "@/lib/socket";
+import HowToPlayModal from "@/components/game/HowToPlayModal";
 
 export default function HomePage() {
   const router = useRouter();
   const [lastRoom, setLastRoom] = useState<{ code: string; isHost: boolean; status?: string } | null>(null);
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   useEffect(() => {
     wakeUpGameServer();
@@ -200,6 +202,16 @@ export default function HomePage() {
             <LogIn size={20} />
             Entrar em uma Sala
           </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setShowHowToPlay(true)}
+            className="w-full py-3.5 rounded-xl bg-card/60 hover:bg-card border border-border/60 hover:border-neon-cyan/50 text-foreground font-display text-xs tracking-widest uppercase flex items-center justify-center gap-2 transition-all shadow-sm"
+          >
+            <HelpCircle size={18} className="text-neon-cyan" />
+            Como Jogar
+          </motion.button>
         </motion.div>
 
         {/* Footer */}
@@ -212,6 +224,12 @@ export default function HomePage() {
           2 – 16 jogadores • Filmes • Músicas • Séries • Cultura Pop
         </motion.p>
       </motion.div>
+
+      <HowToPlayModal
+        isOpen={showHowToPlay}
+        onClose={() => setShowHowToPlay(false)}
+        onStartPlaying={() => router.push("/setup?mode=create")}
+      />
     </div>
   );
 }
