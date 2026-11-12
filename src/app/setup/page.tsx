@@ -39,7 +39,9 @@ function SetupContent() {
     }
     return "game";
   });
-  const [roomCode, setRoomCode] = useState("");
+  const [roomCode, setRoomCode] = useState(() => {
+    return searchParams.get("code")?.toUpperCase() || "";
+  });
   const [nameGlow, setNameGlow] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -91,16 +93,14 @@ function SetupContent() {
           return;
         }
 
+        const cleanCode = roomCode.trim().toUpperCase();
         const data = await emitWithAck(
           "room:join",
           {
-            roomCode: roomCode.trim().toUpperCase(),
+            roomCode: cleanCode,
             playerName: name.trim(),
             playerAvatar: avatar,
-            sessionId:
-              typeof window !== "undefined"
-                ? JSON.parse(sessionStorage.getItem("player") || "{}").sessionId
-                : null,
+            sessionId: null,
           },
           40000
         );
@@ -120,14 +120,18 @@ function SetupContent() {
           sessionId: data.player.sessionId,
           name: data.player.name,
           avatar: data.player.avatar,
-          roomCode: roomCode.toUpperCase(),
+          roomCode: cleanCode,
           isHost: false,
         });
 
         sessionStorage.setItem("player", playerInfo);
         localStorage.setItem("player", playerInfo);
 
-        router.push(`/lobby/${roomCode.toUpperCase()}`);
+        if (data?.room?.status === "playing") {
+          router.push(`/game/${cleanCode}`);
+        } else {
+          router.push(`/lobby/${cleanCode}`);
+        }
       }
     } catch (err) {
       setError("Erro ao conectar ao servidor. Tente novamente.");

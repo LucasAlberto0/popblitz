@@ -209,10 +209,14 @@ function GameContent() {
 
   useEffect(() => {
     if (currentRound?.round_number === 1 && preGameCountdown === null && !showRoundResult && !answered && !hasCheckedInitialCountdown) {
-      setPreGameCountdown(5); // Fixa em 5 segundos
+      const startedMs = currentRound.started_at ? new Date(currentRound.started_at).getTime() : 0;
+      const elapsedMs = startedMs ? getServerNow() - startedMs : 0;
+      if (elapsedMs < 5000) {
+        setPreGameCountdown(Math.max(1, Math.ceil((5500 - elapsedMs) / 1000)));
+      }
       setHasCheckedInitialCountdown(true);
     }
-  }, [currentRound?.round_number, showRoundResult, answered, preGameCountdown, hasCheckedInitialCountdown]);
+  }, [currentRound?.round_number, currentRound?.started_at, showRoundResult, answered, preGameCountdown, hasCheckedInitialCountdown]);
 
   useEffect(() => {
     if (preGameCountdown !== null && preGameCountdown > 0) {

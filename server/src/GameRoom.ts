@@ -172,7 +172,7 @@ export class GameRoom {
       avatar: playerAvatar || 'game',
       score: 0,
       streak: 0,
-      status: 'ready',
+      status: this.room.status === 'playing' ? 'playing' : 'ready',
       is_host: false,
       player_order: this.players.length + 1,
       joined_at: nowIso,
@@ -372,7 +372,9 @@ export class GameRoom {
 
   public participateMidGame(playerId: string, sessionId: string): { success: boolean; error?: string } {
     this.touch()
-    const player = this.players.find((p) => p.id === playerId && p.session_id === sessionId)
+    const player = this.players.find(
+      (p) => p.id === playerId || (sessionId && p.session_id === sessionId)
+    )
     if (!player) return { success: false, error: 'Jogador não encontrado' }
 
     player.status = 'playing'
