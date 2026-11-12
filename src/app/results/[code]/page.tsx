@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import ConfettiEffect from "@/components/game/ConfettiEffect";
-import { Trophy, Medal, Award, RotateCcw, Home, Loader2 } from "lucide-react";
+import { Trophy, Medal, Award, RotateCcw, Home, Loader2, Crown } from "lucide-react";
 import AvatarDisplay from "@/components/game/AvatarDisplay";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 import { emitWithAck } from "@/lib/socket";
@@ -54,14 +54,14 @@ function ResultsContent() {
   };
 
   useEffect(() => {
-    const t = setTimeout(() => setShowConfetti(false), 5000);
+    const t = setTimeout(() => setShowConfetti(false), 8000);
     return () => clearTimeout(t);
   }, []);
 
   const podiumIcons = [
-    <Trophy className="text-neon-yellow" size={32} key="trophy" />,
-    <Medal className="text-muted-foreground" size={28} key="medal" />,
-    <Award className="text-neon-orange" size={24} key="award" />,
+    <Trophy className="text-neon-yellow drop-shadow-[0_0_15px_rgba(255,215,0,0.8)]" size={36} key="trophy" />,
+    <Medal className="text-slate-300 drop-shadow-[0_0_10px_rgba(200,200,220,0.5)]" size={28} key="medal" />,
+    <Award className="text-neon-orange drop-shadow-[0_0_10px_rgba(255,140,0,0.5)]" size={26} key="award" />,
   ];
 
   const podiumOrder = [1, 0, 2];
@@ -105,16 +105,18 @@ function ResultsContent() {
           <p className="text-muted-foreground font-ui">Sala {code}</p>
         </div>
 
-        <div className="flex items-end justify-center gap-4">
+        <div className="flex items-end justify-center gap-3 sm:gap-4">
           {podiumOrder.map((pos, visualIdx) => {
             const player = top3[pos];
             if (!player) return null;
+            const isWinner = pos === 0;
+
             return (
               <motion.div
                 key={player.id}
                 initial={{ opacity: 0, y: 50 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 + visualIdx * 0.2, type: "spring" }}
+                transition={{ delay: 0.4 + visualIdx * 0.18, type: "spring", damping: 15 }}
                 className="flex flex-col items-center"
               >
                 <motion.div
@@ -124,16 +126,37 @@ function ResultsContent() {
                 >
                   {podiumIcons[pos]}
                 </motion.div>
-                <div className="mb-1">
-                  <AvatarDisplay avatarId={player.avatar} size={48} fallbackText={player.name} />
+                <div className="mb-1 relative">
+                  {isWinner && (
+                    <motion.div
+                      animate={{ rotate: [-6, 6, -6], y: [-2, -5, -2] }}
+                      transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute -top-4 -right-2 text-neon-yellow z-10 drop-shadow-[0_0_8px_rgba(255,215,0,0.8)]"
+                    >
+                      <Crown size={18} />
+                    </motion.div>
+                  )}
+                  <div className={isWinner ? "p-1 rounded-full ring-2 ring-neon-yellow shadow-[0_0_20px_rgba(255,215,0,0.4)]" : ""}>
+                    <AvatarDisplay avatarId={player.avatar} size={isWinner ? 54 : 44} fallbackText={player.name} />
+                  </div>
                 </div>
-                 <p className={`font-ui font-bold text-sm ${player.id === currentPlayerId ? "text-primary anim-pulse" : "text-foreground"}`}>
+                <p className={`font-ui font-bold text-sm ${player.id === currentPlayerId ? "text-primary anim-pulse" : "text-foreground"}`}>
                   {player.name} {player.id === currentPlayerId && "(Você)"}
                 </p>
-                <p className="font-display text-xs text-primary">{player.score} pts</p>
-                <div className={`w-20 ${podiumHeights[pos]} mt-2 rounded-t-xl bg-gradient-to-t from-muted to-card border border-border flex items-start justify-center pt-3`}>
-                  <span className="font-display text-lg text-muted-foreground">#{pos + 1}</span>
-                </div>
+                <p className="font-display text-xs text-primary font-bold">{player.score} pts</p>
+                <motion.div
+                  initial={{ scaleY: 0 }}
+                  animate={{ scaleY: 1 }}
+                  transition={{ delay: 0.6 + visualIdx * 0.15, type: "spring", stiffness: 120, damping: 14 }}
+                  style={{ transformOrigin: "bottom" }}
+                  className={`w-20 sm:w-24 ${podiumHeights[pos]} mt-2 rounded-t-xl bg-gradient-to-t from-muted to-card border ${
+                    isWinner ? "border-neon-yellow/50 shadow-[0_0_25px_rgba(255,215,0,0.25)]" : "border-border"
+                  } flex items-start justify-center pt-3`}
+                >
+                  <span className={`font-display text-lg font-black ${isWinner ? "text-neon-yellow" : "text-muted-foreground"}`}>
+                    #{pos + 1}
+                  </span>
+                </motion.div>
               </motion.div>
             );
           })}
@@ -145,24 +168,32 @@ function ResultsContent() {
               key={p.id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 1 + i * 0.1 }}
-               className={`flex items-center gap-3 p-3 rounded-lg ${p.id === currentPlayerId ? "bg-primary/10 border border-primary/20" : "bg-muted/20"}`}
+              transition={{ delay: 0.9 + i * 0.08 }}
+              className={`flex items-center gap-3 p-3 rounded-lg ${p.id === currentPlayerId ? "bg-primary/10 border border-primary/20" : "bg-muted/20"}`}
             >
               <span className="font-display text-sm text-muted-foreground w-6 text-center">#{i + 1}</span>
               <AvatarDisplay avatarId={p.avatar} size={28} fallbackText={p.name} />
-               <span className={`font-ui font-semibold text-sm flex-1 ${p.id === currentPlayerId ? "text-primary" : ""}`}>
+              <span className={`font-ui font-semibold text-sm flex-1 ${p.id === currentPlayerId ? "text-primary" : ""}`}>
                 {p.name} {p.id === currentPlayerId && <span className="text-[10px] text-primary/60 ml-1">(Você)</span>}
               </span>
-              <span className="font-display text-sm text-primary">{p.score}</span>
+              <span className="font-display text-sm text-primary font-bold">{p.score}</span>
             </motion.div>
           ))}
         </div>
 
         <div className="flex gap-3">
-           {isHost && (
+          {isHost && (
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              animate={{
+                boxShadow: [
+                  "0 0 10px rgba(0, 240, 255, 0.4)",
+                  "0 0 25px rgba(0, 240, 255, 0.8)",
+                  "0 0 10px rgba(0, 240, 255, 0.4)",
+                ],
+              }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               onClick={handleRestart}
               className="btn-neon flex-1 py-4 rounded-xl text-primary-foreground font-display text-xs tracking-widest flex items-center justify-center gap-2"
             >

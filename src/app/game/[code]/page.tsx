@@ -767,18 +767,28 @@ function GameContent() {
                     <motion.span
                       key={`count-${preGameCountdown}`}
                       initial={{ scale: 0.5, opacity: 0 }}
-                      animate={{ scale: 1.2, opacity: 1 }}
-                      transition={{ type: "spring", damping: 12, stiffness: 200 }}
-                      className="font-display text-[120px] font-black gradient-text drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]"
+                      animate={
+                        preGameCountdown === 0
+                          ? { scale: [0.6, 1.45, 1.25], opacity: 1, rotate: [-2, 2, 0] }
+                          : { scale: 1.2, opacity: 1 }
+                      }
+                      transition={{ type: "spring", damping: 12, stiffness: 220 }}
+                      className={`font-display text-[120px] font-black ${
+                        preGameCountdown === 0
+                          ? "text-neon-green drop-shadow-[0_0_35px_rgba(57,255,20,0.9)]"
+                          : "gradient-text drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]"
+                      }`}
                     >
                       {preGameCountdown === 0 ? "JÁ!" : preGameCountdown}
                     </motion.span>
                     <motion.p
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      className="text-primary font-display tracking-[0.5em] text-sm uppercase -mt-4 opacity-70"
+                      className={`font-display tracking-[0.5em] text-sm uppercase -mt-4 ${
+                        preGameCountdown === 0 ? "text-neon-green font-bold opacity-100" : "text-primary opacity-70"
+                      }`}
                     >
-                      Prepare-se
+                      {preGameCountdown === 0 ? "VALENDO!" : "Prepare-se"}
                     </motion.p>
                   </div>
                 </motion.div>
@@ -787,9 +797,10 @@ function GameContent() {
               {!showRoundResult ? (
                 <motion.div
                   key={`q-${currentRound.round_number}`}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 1.05 }}
+                  initial={{ opacity: 0, scale: 0.94, y: 14 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: -10 }}
+                  transition={{ type: "spring", damping: 22, stiffness: 260 }}
                   className={`glass-card p-2 sm:p-4 max-w-xl w-full flex flex-col gap-2 sm:gap-3 transition-all duration-700 min-h-[320px] lg:min-h-0 ${preGameCountdown !== null ? "blur-md brightness-50 grayscale select-none" : ""
                     }`}
                 >
@@ -996,51 +1007,79 @@ function GameContent() {
               ) : (
                 <motion.div
                   key={`result-${currentRound.round_number}`}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="glass-card p-8 text-center max-w-md w-full"
+                  initial={{ opacity: 0, scale: 0.88, y: 24 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ type: "spring", damping: 20, stiffness: 280 }}
+                  className="glass-card p-6 sm:p-8 text-center max-w-md w-full border border-primary/30 shadow-[0_0_30px_rgba(0,240,255,0.15)]"
                 >
-                  <h3 className="font-display text-lg text-primary mb-2">
+                  <motion.h3
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="font-display text-xs uppercase tracking-widest text-primary/80 mb-2"
+                  >
                     {currentRound.type === 'surprise' ? 'Fim do Roubo!' : 'Resposta Correta'}
-                  </h3>
-                  <p className="font-display text-3xl gradient-text mb-4">
+                  </motion.h3>
+                  <motion.p
+                    initial={{ scale: 1.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 350, damping: 18, delay: 0.15 }}
+                    className="font-display text-3xl sm:text-4xl gradient-text mb-4 font-black drop-shadow-[0_0_20px_rgba(255,255,255,0.25)]"
+                  >
                     {currentRound.type === 'surprise' ? '💰💸' : currentRound.answer}
-                  </p>
+                  </motion.p>
                   {roundResult && roundResult.answers && (
                     <div className="mb-4 max-h-[200px] overflow-y-auto custom-scrollbar px-2">
-                      <p className="text-sm text-muted-foreground font-ui mb-2 sticky top-0 bg-background/80 backdrop-blur-sm py-1">
-                        {currentRound.type === 'surprise' ? 'Ação:' : 'Acertos:'}
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground font-ui mb-2 sticky top-0 bg-background/80 backdrop-blur-sm py-1">
+                        {currentRound.type === 'surprise' ? 'Ação:' : 'Acertos nesta rodada:'}
                       </p>
                       <div className="flex flex-wrap gap-2 justify-center">
-                        {roundResult.answers
-                          .filter((a: any) => a.is_correct)
-                          .map((a: any) => (
-                            <div key={a.id} className="flex flex-col items-center">
-                              {currentRound.type === 'surprise' ? (
-                                <span className="text-sm font-bold text-neon-magenta bg-neon-magenta/10 px-4 py-2 rounded-lg border border-neon-magenta/30 flex items-center gap-2">
-                                  <span className="text-lg">🦹</span> {a.player?.name} {a.answer}
-                                </span>
-                              ) : (
-                                <span className="text-xs bg-neon-green/20 text-neon-green px-2 py-1 rounded">
-                                  {a.player?.name || "Jogador"}
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                        {roundResult.answers.filter((a: any) => a.is_correct).length === 0 && currentRound.type !== 'surprise' ? (
+                          <motion.span
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="text-xs text-muted-foreground italic py-1"
+                          >
+                            Ninguém acertou nesta rodada 😅
+                          </motion.span>
+                        ) : (
+                          roundResult.answers
+                            .filter((a: any) => a.is_correct)
+                            .map((a: any, idx: number) => (
+                              <motion.div
+                                key={a.id || idx}
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: "spring", delay: 0.22 + idx * 0.08, stiffness: 400, damping: 16 }}
+                                className="flex flex-col items-center"
+                              >
+                                {currentRound.type === 'surprise' ? (
+                                  <span className="text-sm font-bold text-neon-magenta bg-neon-magenta/10 px-4 py-2 rounded-lg border border-neon-magenta/30 flex items-center gap-2">
+                                    <span className="text-lg">🦹</span> {a.player?.name} {a.answer}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-bold bg-neon-green/20 text-neon-green px-3 py-1.5 rounded-full border border-neon-green/40 shadow-[0_0_10px_rgba(57,255,20,0.25)] flex items-center gap-1.5">
+                                    <span>✨</span> {a.player?.name || "Jogador"}
+                                  </span>
+                                )}
+                              </motion.div>
+                            ))
+                        )}
                       </div>
                     </div>
                   )}
-                  <div className="text-sm text-muted-foreground font-ui mb-6">
+                  <div className="text-sm text-muted-foreground font-ui mb-2">
                     {roundResult?.gameFinished
                       ? <span className="text-lg font-bold text-primary block">🏆 {roundResult?.winner?.name || "Alguém"} venceu o jogo!</span>
                       : (
-                        <div className="flex flex-col gap-1">
-                          <span>Próxima rodada em</span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-xs uppercase tracking-wider text-muted-foreground">Próxima rodada em</span>
                           <motion.span
                             key={resultCountdown}
-                            initial={{ scale: 1.2, opacity: 0 }}
+                            initial={{ scale: 1.4, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
-                            className="text-xl font-black text-primary"
+                            transition={{ type: "spring", damping: 12 }}
+                            className="text-2xl font-black text-primary font-display"
                           >
                             {resultCountdown}s
                           </motion.span>
@@ -1054,10 +1093,20 @@ function GameContent() {
             <AnimatePresence>
               {scorePopup !== null && (
                 <motion.div
-                  initial={{ scale: 0, y: 0 }}
-                  animate={{ scale: 1.3, y: -60 }}
-                  exit={{ opacity: 0, y: -100 }}
-                  className={`absolute top-1/3 font-display text-3xl font-black ${scorePopup > 0 ? "text-neon-green glow-cyan" : "text-destructive glow-magenta"} pointer-events-none`}
+                  initial={{ scale: 0.2, y: 20, opacity: 0, rotate: scorePopup > 0 ? -12 : 12 }}
+                  animate={{
+                    scale: [0.2, 1.4, 1.2],
+                    y: [20, -55, -80],
+                    opacity: [0, 1, 1],
+                    rotate: [scorePopup > 0 ? -12 : 12, 0, scorePopup > 0 ? 6 : -6]
+                  }}
+                  exit={{ opacity: 0, scale: 0.8, y: -115 }}
+                  transition={{ duration: 0.75, ease: "easeOut" }}
+                  className={`absolute top-1/3 font-display text-4xl sm:text-5xl font-black ${
+                    scorePopup > 0
+                      ? "text-neon-green drop-shadow-[0_0_25px_rgba(57,255,20,0.9)]"
+                      : "text-destructive drop-shadow-[0_0_25px_rgba(255,0,85,0.9)]"
+                  } pointer-events-none z-50`}
                 >
                   {scorePopup > 0 ? `+${scorePopup}` : scorePopup}
                 </motion.div>
@@ -1178,21 +1227,29 @@ function GameContent() {
           <AnimatePresence>
             {feedback && !showRoundResult && currentRound.type !== 'boolean' && (
               <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
+                initial={{ opacity: 0, scale: 0.8, y: -8 }}
+                animate={{
+                  opacity: 1,
+                  scale: [0.8, 1.15, 1],
+                  y: 0,
+                  x: feedback === "wrong" ? [-5, 5, -3, 3, 0] : 0,
+                }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ type: "spring", stiffness: 400, damping: 18 }}
                 className={`flex items-center justify-center gap-2 mt-2 font-ui text-sm font-bold ${
-                  feedback === "correct" ? "text-neon-green" : "text-destructive"
+                  feedback === "correct"
+                    ? "text-neon-green drop-shadow-[0_0_12px_rgba(57,255,20,0.6)]"
+                    : "text-destructive drop-shadow-[0_0_12px_rgba(255,0,85,0.6)]"
                 }`}
               >
                 {feedback === "correct" ? (
                   <>
-                    <Check size={16} />
+                    <Check size={18} className="animate-bounce" />
                     <span>Acertou!</span>
                   </>
                 ) : (
                   <>
-                    <XCircle size={16} />
+                    <XCircle size={18} />
                     <span>Errou!</span>
                   </>
                 )}

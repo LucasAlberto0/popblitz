@@ -55,6 +55,7 @@ const RankingList = ({ players, currentPlayerId, answers, maxScore, roundStatus,
                 avatar={player.avatar}
                 score={player.score}
                 rank={i + 1}
+                streak={player.streak}
                 isCorrect={showCorrect}
                 responseTime={showResponseTime}
                 lastGuess={showLastGuess}

@@ -148,9 +148,22 @@ export default function HomePage() {
             {lastRoom && (
               <motion.button
                 initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
+                animate={{
+                  opacity: 1,
+                  scale: [1, 1.02, 1],
+                  boxShadow: [
+                    "0 0 10px rgba(0, 240, 255, 0.3)",
+                    "0 0 25px rgba(0, 240, 255, 0.7)",
+                    "0 0 10px rgba(0, 240, 255, 0.3)",
+                  ]
+                }}
+                transition={{
+                  scale: { duration: 2.2, repeat: Infinity, ease: "easeInOut" },
+                  boxShadow: { duration: 2.2, repeat: Infinity, ease: "easeInOut" },
+                  opacity: { duration: 0.4 }
+                }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                whileHover={{ scale: 1.03 }}
+                whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={() =>
                   router.push(

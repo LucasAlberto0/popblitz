@@ -249,8 +249,10 @@ function LobbyContent() {
                     return (
                       <motion.div
                         key={p.id}
+                        layout
                         initial={{ opacity: 0, scale: 0.5 }}
                         animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
                         transition={{ type: "spring", delay: i * 0.05 }}
                         className={`glass-card p-4 text-center relative min-h-[110px] flex flex-col justify-center items-center transition-opacity ${isDisconnected ? "opacity-50 grayscale" : ""}`}
                       >
@@ -271,7 +273,12 @@ function LobbyContent() {
                             DESCONECTADO
                           </span>
                         ) : (
-                          <div className={`w-2 h-2 rounded-full mt-2 ${p.status === 'ready' ? "bg-neon-green" : "bg-muted-foreground"}`} />
+                          <div className="relative mt-2 flex items-center justify-center">
+                            <div className={`w-2 h-2 rounded-full ${p.status === 'ready' ? "bg-neon-green" : "bg-muted-foreground"}`} />
+                            {p.status === 'ready' && (
+                              <div className="absolute w-2 h-2 rounded-full bg-neon-green animate-ping opacity-75" />
+                            )}
+                          </div>
                         )}
                       </motion.div>
                     );
@@ -279,26 +286,59 @@ function LobbyContent() {
                 </AnimatePresence>
 
                 {Array.from({ length: Math.max(0, (room?.max_players || 16) - players.length) }).slice(0, 10).map((_, i) => (
-                  <div key={`empty-${i}`} className="border border-dashed border-border rounded-xl p-4 text-center opacity-30 min-h-[110px] flex flex-col justify-center items-center">
+                  <motion.div
+                    key={`empty-${i}`}
+                    animate={{ opacity: [0.2, 0.38, 0.2] }}
+                    transition={{ duration: 3, repeat: Infinity, delay: i * 0.2 }}
+                    className="border border-dashed border-border rounded-xl p-4 text-center min-h-[110px] flex flex-col justify-center items-center"
+                  >
                     <div className="text-3xl mb-2 flex-grow flex items-center justify-center">❓</div>
                     <p className="font-ui text-xs text-muted-foreground">Vazio</p>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
             
             <div className="flex flex-col sm:flex-row gap-3">
               {isHost && (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleStartGame}
-                  disabled={players.length < 2 || isStarting}
-                  className="btn-neon flex-1 py-4 rounded-xl text-primary-foreground font-display text-sm tracking-widest disabled:opacity-40 flex items-center justify-center gap-2"
-                >
-                  {isStarting ? <Loader2 className="animate-spin" /> : <Play size={20} />}
-                  {isStarting ? "Iniciando..." : "Iniciar Jogo"}
-                </motion.button>
+                <div className="flex-1 flex flex-col">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    animate={
+                      players.length >= 2 && !isStarting
+                        ? {
+                            boxShadow: [
+                              "0 0 10px rgba(0, 240, 255, 0.4)",
+                              "0 0 24px rgba(0, 240, 255, 0.8)",
+                              "0 0 10px rgba(0, 240, 255, 0.4)",
+                            ],
+                            scale: [1, 1.015, 1],
+                          }
+                        : {}
+                    }
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    onClick={handleStartGame}
+                    disabled={players.length < 2 || isStarting}
+                    className="btn-neon w-full py-4 rounded-xl text-primary-foreground font-display text-sm tracking-widest disabled:opacity-40 flex items-center justify-center gap-2"
+                  >
+                    {isStarting ? <Loader2 className="animate-spin" /> : <Play size={20} />}
+                    {isStarting ? "Iniciando..." : "Iniciar Jogo"}
+                  </motion.button>
+                  {players.length < 2 && (
+                    <motion.p
+                      animate={{ opacity: [0.5, 1, 0.5] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="text-[11px] text-center text-muted-foreground font-ui mt-1.5"
+                    >
+                      Mínimo de 2 jogadores para iniciar
+                    </motion.p>
+                  )}
+                </div>
               )}
               <motion.button
                 whileHover={{ scale: 1.02 }}
