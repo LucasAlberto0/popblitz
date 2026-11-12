@@ -39,9 +39,9 @@ function GameContent() {
   const [copied, setCopied] = useState(false);
   const [activeSidebarTab, setActiveSidebarTab] = useState<'ranking' | 'chat'>('ranking');
   
-  // Mobile Audio Reliability State
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  // Audio State (Enabled by default)
   const [isMuted, setIsMuted] = useState(false);
+  const roundAudioRef = useRef<HTMLAudioElement | null>(null);
   const soundBankRef = useRef<{
     correct: HTMLAudioElement | null;
     wrong: HTMLAudioElement | null;
@@ -120,58 +120,60 @@ function GameContent() {
     };
   }, [playerData?.id, playerData?.sessionId, code]);
 
-  // --- NEW: Audio Unlock & Pooling Logic ---
+  // --- Audio Preloading & Auto-Unlock Logic (Active by default) ---
   useEffect(() => {
-    // Prevent multiple initializations
     if (soundBankRef.current.correct) return;
 
-    // Pre-instantiate sounds
     const correct = new Audio('/sounds/msn.mp3?v=2');
-    // const wrong = new Audio('/sounds/wrong.mp3'); // Add if you have a wrong sound
-    
+    correct.volume = 0.5;
+
     soundBankRef.current = {
       correct,
       wrong: null,
-      tick: null
+      tick: null,
     };
 
-    // Attempt to auto-check if already unlocked (some browsers allow after interaction)
-    const checkAudio = () => {
-      if (correct.paused === false) {
-        setIsAudioEnabled(true);
+    const autoUnlock = () => {
+      if (soundBankRef.current.correct) {
+        soundBankRef.current.correct.volume = 0.01;
+        soundBankRef.current.correct.play().then(() => {
+          soundBankRef.current.correct!.pause();
+          soundBankRef.current.correct!.currentTime = 0;
+          soundBankRef.current.correct!.volume = 0.5;
+        }).catch(() => {});
       }
     };
-    
-    window.addEventListener('click', checkAudio, { once: true });
-    return () => window.removeEventListener('click', checkAudio);
+
+    window.addEventListener('click', autoUnlock, { once: true });
+    window.addEventListener('keydown', autoUnlock, { once: true });
+    window.addEventListener('touchstart', autoUnlock, { once: true });
+
+    return () => {
+      window.removeEventListener('click', autoUnlock);
+      window.removeEventListener('keydown', autoUnlock);
+      window.removeEventListener('touchstart', autoUnlock);
+    };
   }, []);
 
-  const handleAudioToggle = async () => {
-    if (!isAudioEnabled) {
-      await unlockAudio();
-    } else {
-      setIsMuted(!isMuted);
-    }
+  const handleAudioToggle = () => {
+    setIsMuted((prev) => {
+      const nextMuted = !prev;
+      if (roundAudioRef.current) {
+        roundAudioRef.current.volume = nextMuted ? 0 : 0.5;
+      }
+      return nextMuted;
+    });
   };
 
   const unlockAudio = async () => {
     const { correct } = soundBankRef.current;
     if (!correct) return;
-
     try {
-      // Play a tiny bit of the sound to "unlock" the audio context/interface
       correct.volume = 0.01;
       await correct.play();
       correct.pause();
       correct.currentTime = 0;
       correct.volume = 0.5;
-      
-      setIsAudioEnabled(true);
-      setIsMuted(false); // Ensure unmuted after unlock
-      // Small feedback
-      const audio = new Audio('/sounds/msn.mp3?v=2');
-      audio.volume = 0.2;
-      audio.play().catch(() => {});
     } catch (err) {
       console.warn("Audio unlock failed:", err);
     }
@@ -360,7 +362,7 @@ function GameContent() {
       
       if (hasNewCorrect && !showRoundResult && currentRound?.type !== 'boolean') {
         const sound = soundBankRef.current.correct;
-        if (sound && isAudioEnabled && !isMuted) {
+        if (sound && !isMuted) {
           sound.currentTime = 0;
           sound.play().catch(() => {
             // Fallback if pooling fails
@@ -371,7 +373,7 @@ function GameContent() {
       }
     }
     lastAnswersCountRef.current = answers.length;
-  }, [answers, showRoundResult, isAudioEnabled]);
+  }, [answers, showRoundResult, isMuted]);
 
   useEffect(() => {
     if (room?.status === 'finished') {
@@ -457,7 +459,7 @@ function GameContent() {
               if (myAnswer.is_correct) {
                 setFeedback("correct");
                 const sound = soundBankRef.current.correct;
-                if (sound && isAudioEnabled && !isMuted) {
+                if (sound && !isMuted) {
                   sound.currentTime = 0;
                   sound.play().catch(() => {});
                 }
@@ -565,7 +567,7 @@ function GameContent() {
       setTimeout(() => setScorePopup(null), 1000);
 
       const sound = soundBankRef.current.correct;
-      if (sound && isAudioEnabled && !isMuted) {
+      if (sound && !isMuted) {
         sound.currentTime = 0;
         sound.play().catch(() => {});
       }
@@ -622,15 +624,13 @@ function GameContent() {
                 whileTap={{ scale: 0.9 }}
                 onClick={handleAudioToggle}
                 className={`p-2 rounded-full border shadow-lg transition-all ${
-                  !isAudioEnabled 
-                    ? "bg-destructive/10 border-destructive/30 text-destructive animate-pulse"
-                    : isMuted
-                      ? "bg-neon-yellow/10 border-neon-yellow/30 text-neon-yellow"
-                      : "bg-neon-green/10 border-neon-green/30 text-neon-green"
+                  isMuted 
+                    ? "bg-destructive/10 border-destructive/30 text-destructive"
+                    : "bg-neon-green/10 border-neon-green/30 text-neon-green"
                 }`}
-                title={!isAudioEnabled ? "Ativar Áudio" : isMuted ? "Desmutar" : "Mutar"}
+                title={isMuted ? "Ativar Áudio" : "Desativar Áudio"}
               >
-                {!isAudioEnabled || isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.1, rotate: 90 }}
@@ -841,6 +841,7 @@ function GameContent() {
                        <audio 
                          src={currentRound.audio_url} 
                          ref={(el) => {
+                           roundAudioRef.current = el;
                            if (el) {
                              el.volume = isMuted ? 0 : 0.5;
                              if (preGameCountdown === null && !showRoundResult) {
