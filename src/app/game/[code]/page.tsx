@@ -7,14 +7,15 @@ import TimerRing from "@/components/game/TimerRing";
 import RankingList from "@/components/game/RankingList";
 import ChatPanel from "@/components/game/ChatPanel";
 import AvatarDisplay from "@/components/game/AvatarDisplay";
-import { Loader2, Settings, X, Crown, Info, Copy, Check, Volume2, VolumeX, XCircle, RefreshCw } from "lucide-react";
+import { Loader2, Settings, X, Crown, Info, Copy, Check, Volume2, VolumeX, XCircle } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
+import { emitWithAck, getGameSocket, getServerNow } from "@/lib/socket";
 
 function GameContent() {
   const router = useRouter();
   const params = useParams();
   const code = params.code as string;
-  const { room, players, currentRound, upcomingRounds, answers, isLoading: initialLoading } = useRealtimeRoom(code);
+  const { room, players, currentRound, upcomingRounds, answers, roundResult: serverRoundResult, isLoading: initialLoading } = useRealtimeRoom(code);
   const [isHost, setIsHost] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
   const [answer, setAnswer] = useState("");
@@ -25,7 +26,6 @@ function GameContent() {
   const [roundResult, setRoundResult] = useState<any>(null);
   const [preGameCountdown, setPreGameCountdown] = useState<number | null>(null);
   const [resultCountdown, setResultCountdown] = useState<number | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
   const startTimeRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const audioPlayedRef = useRef<boolean>(false);
@@ -76,20 +76,17 @@ function GameContent() {
   const isLuckyPlayer = currentRound?.lucky_player_id === playerData?.id;
   const isSurpriseRound = currentRound?.type === 'surprise';
 
-  // --- NEW: Heartbeat Logic (Web Worker to avoid background throttling) ---
+  // --- NEW: Heartbeat Logic (Web Worker over WebSocket to avoid background throttling) ---
   useEffect(() => {
     if (!playerData?.id || !code) return;
 
-    const sendHeartbeat = async () => {
-      try {
-        await fetch(`/api/players/${playerData.id}/heartbeat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: playerData.sessionId }),
-        });
-      } catch (err) {
-        console.error("Heartbeat failed:", err);
-      }
+    const socket = getGameSocket();
+    const sendHeartbeat = () => {
+      socket.emit("player:heartbeat", {
+        roomCode: code,
+        playerId: playerData.id,
+        sessionId: playerData.sessionId,
+      });
     };
 
     const workerCode = `
@@ -111,9 +108,7 @@ function GameContent() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        setIsSyncing(true);
         sendHeartbeat();
-        setTimeout(() => setIsSyncing(false), 800);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -124,33 +119,6 @@ function GameContent() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [playerData?.id, playerData?.sessionId, code]);
-
-  // --- NEW: Auto-kick Logic (Host only) ---
-  useEffect(() => {
-    if (!isHost || !playerData?.id || !code) return;
-
-    const checkKicks = async () => {
-      const now = Date.now();
-      for (const player of players) {
-        if (player.id !== playerData.id && player.last_seen_at) {
-          const lastSeen = new Date(player.last_seen_at).getTime();
-          const inactiveSecs = (now - lastSeen) / 1000;
-          
-          if (inactiveSecs > 65) { // Threshold for 12s heartbeats (5x margin + buffer)
-            console.log(`Host kicking inactive player: ${player.name} (${inactiveSecs}s)`);
-            fetch(`/api/players/${player.id}/kick`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sessionId: playerData.sessionId }),
-            }).catch(() => {});
-          }
-        }
-      }
-    };
-
-    const kickInterval = setInterval(checkKicks, 30000); // Check every 30s
-    return () => clearInterval(kickInterval);
-  }, [isHost, players, playerData?.id, playerData?.sessionId, code]);
 
   // --- NEW: Audio Unlock & Pooling Logic ---
   useEffect(() => {
@@ -209,7 +177,7 @@ function GameContent() {
     }
   };
 
-  // --- Result Countdown Sync ---
+  // --- Result Countdown Sync (Authoritative Server Clock) ---
   useEffect(() => {
     if (!showRoundResult || !currentRound || currentRound.status !== 'finished') {
       setResultCountdown(room?.interval_time || 8);
@@ -217,31 +185,24 @@ function GameContent() {
     }
 
     const updateResultTimer = () => {
-      if (currentRound.ended_at) {
+      const now = getServerNow();
+      if (currentRound.interval_ends_at_ms) {
+        const remaining = Math.max(0, Math.ceil((currentRound.interval_ends_at_ms - now) / 1000));
+        setResultCountdown(remaining);
+      } else if (currentRound.ended_at) {
         const endedAt = new Date(currentRound.ended_at).getTime();
-        const now = Date.now();
         const elapsed = Math.floor((now - endedAt) / 1000);
         const limit = room?.interval_time || 8;
         const remaining = Math.max(0, limit - elapsed);
-        
         setResultCountdown(remaining);
-
-        // Auto-next round check (Any client can trigger)
-        if (remaining === 0 && currentRound.status === 'finished') {
-          fetch(`/api/rounds/${currentRound.id}/next`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId: playerData?.sessionId }),
-          }).catch(() => {});
-        }
       }
     };
 
-    const intervalId = setInterval(updateResultTimer, 1000);
+    const intervalId = setInterval(updateResultTimer, 250);
     updateResultTimer();
 
     return () => clearInterval(intervalId);
-  }, [showRoundResult, currentRound?.id, currentRound?.status, room?.interval_time, playerData?.sessionId]);
+  }, [showRoundResult, currentRound?.id, currentRound?.status, currentRound?.interval_ends_at_ms, room?.interval_time]);
 
   // --- Pre-Game Countdown Logic with Refresh Persistence ---
   const [hasCheckedInitialCountdown, setHasCheckedInitialCountdown] = useState(false);
@@ -262,7 +223,7 @@ function GameContent() {
       return () => clearTimeout(timer);
     }
   }, [preGameCountdown]);
-
+ 
   useEffect(() => {
     if (currentRound?.status === 'active' && !showRoundResult && preGameCountdown === null) {
       // Focus input when a new round starts or round result is closed
@@ -415,49 +376,44 @@ function GameContent() {
   }, [room?.status, code, router]);
 
 
-  // --- NEW: Sync Timer Logic (Calculated from started_at) ---
+  // --- NEW: Sync Timer Logic (Authoritative Server Clock) ---
   useEffect(() => {
     if (!currentRound || showRoundResult) return;
 
     const updateTimer = () => {
       if (currentRound && currentRound.started_at) {
-        const serverStart = new Date(currentRound.started_at).getTime();
-        const now = Date.now();
-        let elapsedSeconds = Math.floor((now - serverStart) / 1000);
-        
-        // Offset 6 seconds for round 1 due to Pre-Game Countdown (5s count + 1s JÁ)
-        if (currentRound.round_number === 1) {
-          elapsedSeconds -= 6;
-        }
-
+        const now = getServerNow();
         const limit = currentRound.type === 'surprise' ? 50 : (room?.time_per_round || 30);
-        
+
         // Handle Raffle Pause for surprise rounds
         if (isSurpriseRound && isRaffling) {
           setTimeLeft(limit);
           return;
         }
 
-        // Subtract raffle duration
-        if (isSurpriseRound && !isRaffling) {
-          elapsedSeconds -= 4; 
+        if (currentRound.ends_at_ms) {
+          const remainingRaw = Math.ceil((currentRound.ends_at_ms - now) / 1000);
+          const remaining = Math.max(0, Math.min(limit, remainingRaw));
+          setTimeLeft(remaining);
+          return;
         }
-        
-        // Cap the remaining time at the limit so the timer doesn't show 25 instead of 20 during the 5s pre-game animation
-        const remainingRaw = limit - elapsedSeconds;
-        let remaining = Math.min(limit, remainingRaw);
-        remaining = Math.max(0, remaining);
-        
-        setTimeLeft(remaining);
 
-        // Auto-finish check (Any client can trigger, API is idempotent)
-        if (remaining === 0 && currentRound.status === 'active' && !showRoundResult) {
-          handleTimeUp();
+        const serverStart = new Date(currentRound.started_at).getTime();
+        let elapsedSeconds = Math.floor((now - serverStart) / 1000);
+        if (currentRound.round_number === 1) {
+          elapsedSeconds -= 6;
         }
+        if (isSurpriseRound && !isRaffling) {
+          elapsedSeconds -= 4;
+        }
+
+        const remainingRaw = limit - elapsedSeconds;
+        const remaining = Math.max(0, Math.min(limit, remainingRaw));
+        setTimeLeft(remaining);
       }
     };
 
-    const timer = setInterval(updateTimer, 500);
+    const timer = setInterval(updateTimer, 250);
     updateTimer(); // Run immediately
 
     // Tab-out resilience: Refresh timer when user comes back
@@ -472,125 +428,99 @@ function GameContent() {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [currentRound?.id, currentRound?.status, room?.time_per_round, showRoundResult, isRaffling]);
+  }, [currentRound?.id, currentRound?.status, currentRound?.ends_at_ms, room?.time_per_round, showRoundResult, isRaffling]);
 
   useEffect(() => {
     if (currentRound) {
       if (currentRound.status === "finished") {
-        const handleFinishedRound = async () => {
-          try {
-            const res = await fetch(`/api/rounds/${currentRound.id}/finish`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sessionId: playerData?.sessionId }),
-            });
-            const data = await res.json();
+        if (!showRoundResult) {
+          const data = serverRoundResult || {
+            correctAnswer: currentRound.answer,
+            answers,
+            ranking: players,
+            gameFinished: room?.status === 'finished',
+          };
+          setRoundResult(data);
+          setShowRoundResult(true);
 
-            setRoundResult(data);
-            setShowRoundResult(true);
+          // Special handle for boolean reveal
+          if (currentRound.type === 'boolean') {
+            const myAnswer = (data.answers || answers)?.find((a: any) => a.player_id === playerData?.id);
+            if (myAnswer) {
+              setScorePopup(myAnswer.points_earned);
+              setTimeout(() => setScorePopup(null), 1500);
 
-            // Special handle for boolean reveal
-            if (currentRound.type === 'boolean') {
-              const myAnswer = data.answers?.find((a: any) => a.player_id === playerData?.id);
-              if (myAnswer) {
-                // Show score popup for boolean rounds
-                setScorePopup(myAnswer.points_earned);
-                setTimeout(() => setScorePopup(null), 1500);
-
-                if (myAnswer.is_correct) {
-                  setFeedback("correct");
-                  // Play sound only for those who got it right in boolean rounds
-                  const sound = soundBankRef.current.correct;
-                  if (sound && isAudioEnabled && !isMuted) {
-                    sound.currentTime = 0;
-                    sound.play().catch(() => {});
-                  }
-                } else {
-                  setFeedback("wrong");
+              if (myAnswer.is_correct) {
+                setFeedback("correct");
+                const sound = soundBankRef.current.correct;
+                if (sound && isAudioEnabled && !isMuted) {
+                  sound.currentTime = 0;
+                  sound.play().catch(() => {});
                 }
+              } else {
+                setFeedback("wrong");
               }
             }
-
-            // Result transition is now handled by the synchronized useEffect at the top
-          } catch (err) {
-            // Silently fail or handle gracefully in UI
           }
-        };
-
-        if (!showRoundResult) {
-          handleFinishedRound();
+        } else if (serverRoundResult) {
+          setRoundResult(serverRoundResult);
         }
-
-      } else if (currentRound.status === "active" && currentRound.id !== roundResult?.round?.id) {
-        setTimeLeft(room?.time_per_round || 20);
-        setAnswer("");
-        setFeedback(null);
-        setAnswered(false);
-        setShowRoundResult(false);
-        setRoundResult(null);
-        startTimeRef.current = Date.now();
-      audioPlayedRef.current = false;
+      } else if (currentRound.status === "active") {
+        setShowRoundResult((prevShow) => {
+          if (prevShow) {
+            setTimeLeft(room?.time_per_round || 20);
+            setAnswer("");
+            setFeedback(null);
+            setAnswered(false);
+            setRoundResult(null);
+            startTimeRef.current = getServerNow();
+            audioPlayedRef.current = false;
+          }
+          return false;
+        });
       }
     }
-  }, [currentRound, isHost, room?.time_per_round, showRoundResult, roundResult?.round?.id, playerData]);
+  }, [currentRound?.id, currentRound?.status, serverRoundResult, showRoundResult, room?.time_per_round, playerData]);
 
-  const handleTimeUp = async () => {
-    if (currentRound && currentRound.status === 'active' && !showRoundResult) {
-      await fetch(`/api/rounds/${currentRound.id}/finish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: playerData?.sessionId }),
-      });
-    }
-  };
-;  const submitAnswer = async (overriddenAnswer?: string) => {
+  const submitAnswer = async (overriddenAnswer?: string) => {
     const currentAnswer = overriddenAnswer || answer.trim();
     if (!currentAnswer || answered || !currentRound || showRoundResult || feedback === "correct") return;
 
     setAnswered(true);
     setFeedback(null);
 
-    // const playerData = JSON.parse(sessionStorage.getItem("player") || "{}"); // Removed: Use playerData state directly
-
-    // Calculate time offset for first round
+    // Calculate time offset for first round using synchronized server clock
     let startTimeRound = new Date(currentRound.started_at!).getTime();
     if (currentRound.round_number === 1) {
       startTimeRound += 6000;
     }
-    const timeMs = Math.max(0, Date.now() - startTimeRound);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeMs = Math.max(0, getServerNow() - startTimeRound);
 
     try {
-      const res = await fetch(`/api/rounds/${currentRound.id}/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
+      const data = await emitWithAck(
+        "round:submit",
+        {
+          roomCode: code,
+          roundId: currentRound.id,
           playerId: playerData?.id,
           playerSessionId: playerData?.sessionId,
           answer: currentAnswer,
           timeMs,
-        }),
-      });
+        },
+        8000
+      );
 
-      const data = await res.json();
-
-      if (data.isCorrect) {
-        // Only show feedback and score popup for non-boolean rounds
+      if (data?.isCorrect) {
         if (currentRound.type !== 'boolean') {
           setFeedback("correct");
           setScorePopup(data.pointsEarned);
           setTimeout(() => setScorePopup(null), 800);
         }
-        setAnswer(""); 
+        setAnswer("");
       } else {
-        // Only show feedback for non-boolean rounds
         if (currentRound.type !== 'boolean') {
           setFeedback("wrong");
           setAnswered(false);
-          // Small delay to ensure React has updated the DOM before focusing
           setTimeout(() => {
             if (inputRef.current) {
               inputRef.current.focus({ preventScroll: true });
@@ -598,7 +528,7 @@ function GameContent() {
             }
           }, 50);
         }
-        setAnswer(""); // Always clear input
+        setAnswer("");
       }
     } catch (err) {
       setFeedback("wrong");
@@ -610,33 +540,26 @@ function GameContent() {
           inputRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
         }
       }, 50);
-    } finally {
-      clearTimeout(timeoutId);
     }
   };
 
   const handleSteal = async (victimId: string) => {
     if (!currentRound || !isLuckyPlayer || isJoining) return;
-    
-    setIsJoining(true); // Reuse isJoining for steal loading state
-    const playerData = JSON.parse(sessionStorage.getItem("player") || "{}");
-    
+
+    setIsJoining(true);
+
     try {
-      await fetch(`/api/rounds/${currentRound.id}/steal`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          thiefId: playerData.id,
-          victimId,
-          sessionId: playerData.sessionId
-        }),
+      await emitWithAck("round:steal", {
+        roomCode: code,
+        roundId: currentRound.id,
+        thiefId: playerData.id,
+        victimId,
+        sessionId: playerData.sessionId,
       });
 
-      // Show +10 popup
       setScorePopup(10);
       setTimeout(() => setScorePopup(null), 1000);
 
-      // Correct sound for the thief
       const sound = soundBankRef.current.correct;
       if (sound && isAudioEnabled && !isMuted) {
         sound.currentTime = 0;
@@ -675,27 +598,6 @@ function GameContent() {
 
   return (
     <div className="relative min-h-screen lg:h-[100dvh] bg-background overflow-y-auto lg:overflow-hidden flex flex-col custom-scrollbar">
-      <AnimatePresence>
-        {isSyncing && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-background/40 backdrop-blur-md"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="flex flex-col items-center gap-4 bg-black/20 p-8 rounded-2xl border border-primary/20 shadow-2xl transition-all"
-            >
-              <RefreshCw className="w-10 h-10 text-primary animate-spin" />
-              <span className="font-display text-primary tracking-widest uppercase text-sm">
-                Sincronizando...
-              </span>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       {/* Hidden Asset Preloader */}
       {Preloader}
       <div className="relative z-10 lg:flex-1 flex flex-col lg:flex-row lg:min-h-0 lg:h-full lg:overflow-hidden overflow-y-auto lg:custom-scrollbar">
@@ -1052,7 +954,7 @@ function GameContent() {
                                     {players.filter(p => {
                                        const isSelf = p.id === playerData.id;
                                        const lastSeen = p.last_seen_at ? new Date(p.last_seen_at).getTime() : 0;
-                                       const isDisconnected = p.last_seen_at ? (Date.now() - lastSeen > 10000) : false;
+                                       const isDisconnected = !p.socket_id && p.last_seen_at ? (getServerNow() - lastSeen > 40000) : false;
                                        return !isSelf && !isDisconnected;
                                     }).map(p => (
                                       <motion.button
@@ -1170,10 +1072,10 @@ function GameContent() {
                     // Also unlock audio here as it's a user interaction
                     unlockAudio();
                     try {
-                      await fetch(`/api/players/${currentPlayer.id}/participate`, {
-                         method: 'POST',
-                         headers: { "Content-Type": "application/json" },
-                         body: JSON.stringify({ sessionId: playerData?.sessionId })
+                      await emitWithAck("player:participate", {
+                        roomCode: code,
+                        playerId: currentPlayer.id,
+                        sessionId: playerData?.sessionId,
                       });
                     } finally {
                       setIsJoining(false);

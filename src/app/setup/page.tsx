@@ -1,17 +1,22 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import AvatarSelect from "@/components/game/AvatarSelect";
 import AvatarDisplay, { avatarIconsMap } from "@/components/game/AvatarDisplay";
 import { Loader2, Rocket, Zap } from "lucide-react";
+import { emitWithAck, wakeUpGameServer, updateClockOffsetFromServer } from "@/lib/socket";
 
 function SetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode") || "join";
+
+  useEffect(() => {
+    wakeUpGameServer();
+  }, []);
 
   // Load previous player data if exists
   const [name, setName] = useState(() => {
@@ -47,21 +52,23 @@ function SetupContent() {
 
     try {
       if (mode === "create") {
-        const res = await fetch("/api/rooms", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const data = await emitWithAck(
+          "room:create",
+          {
             hostName: name.trim(),
             hostAvatar: avatar,
-          }),
-        });
-        
-        const data = await res.json();
-        
-        if (data.error) {
+          },
+          40000
+        );
+
+        if (data?.error) {
           setError(data.error);
           setIsLoading(false);
           return;
+        }
+
+        if (data?.serverNow) {
+          updateClockOffsetFromServer(data.serverNow);
         }
 
         const playerInfo = JSON.stringify({
@@ -84,22 +91,28 @@ function SetupContent() {
           return;
         }
 
-        const res = await fetch(`/api/rooms/${roomCode}/join`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const data = await emitWithAck(
+          "room:join",
+          {
+            roomCode: roomCode.trim().toUpperCase(),
             playerName: name.trim(),
             playerAvatar: avatar,
-            sessionId: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem("player") || "{}").sessionId : null
-          }),
-        });
-        
-        const data = await res.json();
-        
-        if (data.error) {
+            sessionId:
+              typeof window !== "undefined"
+                ? JSON.parse(sessionStorage.getItem("player") || "{}").sessionId
+                : null,
+          },
+          40000
+        );
+
+        if (data?.error) {
           setError(data.error);
           setIsLoading(false);
           return;
+        }
+
+        if (data?.serverNow) {
+          updateClockOffsetFromServer(data.serverNow);
         }
 
         const playerInfo = JSON.stringify({
@@ -117,7 +130,7 @@ function SetupContent() {
         router.push(`/lobby/${roomCode.toUpperCase()}`);
       }
     } catch (err) {
-      setError("Erro ao conectar. Tente novamente.");
+      setError("Erro ao conectar ao servidor. Tente novamente.");
       setIsLoading(false);
     }
   };

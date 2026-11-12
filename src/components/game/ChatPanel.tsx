@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { getGameSocket } from "@/lib/socket";
 
 interface ChatMessage {
   id: string;
@@ -22,8 +22,6 @@ const ChatPanel = ({ roomCode }: ChatPanelProps) => {
   const [input, setInput] = useState("");
   const [player, setPlayer] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const isInitialSync = useRef(true);
-  const supabase = createClient();
 
   useEffect(() => {
     const sessionData = sessionStorage.getItem("player");
@@ -40,72 +38,30 @@ const ChatPanel = ({ roomCode }: ChatPanelProps) => {
   }, []);
 
   useEffect(() => {
-    if (!roomCode || !player) return;
+    if (!roomCode) return;
 
-    const channel = supabase.channel(`chat:${roomCode}`, {
-      config: {
-        broadcast: { self: true },
-        presence: { key: player.id },
-      },
-    });
-
-    channel
-      .on("broadcast", { event: "message" }, (payload) => {
-        const newMessage = payload.payload as ChatMessage;
-        setMessages((prev) => [...prev, newMessage]);
-      })
-      .on("presence", { event: "sync" }, () => {
-        // After first sync, we know who was already there
-        setTimeout(() => {
-          isInitialSync.current = false;
-        }, 1000); // Small buffer
-      })
-      .on("presence", { event: "join" }, ({ newPresences }) => {
-        if (isInitialSync.current) return;
-
-        newPresences.forEach((p: any) => {
-          if (p.id !== player.id) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `join-${p.id}-${Date.now()}`,
-                sender: "Sistema",
-                text: `${p.name || "Alguém"} entrou na sala`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                isSystem: true,
-              },
-            ]);
-          }
-        });
-      })
-      .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        leftPresences.forEach((p: any) => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `leave-${p.id}-${Date.now()}`,
-              sender: "Sistema",
-              text: `${p.name || "Alguém"} saiu da sala`,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              isSystem: true,
-            },
-          ]);
-        });
-      })
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          await channel.track({
-            id: player.id,
-            name: player.name,
-            avatar: player.avatar,
-          });
-        }
+    const socket = getGameSocket();
+    const handleNewMessage = (newMessage: ChatMessage) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMessage.id)) return prev;
+        return [...prev, newMessage];
       });
+    };
+
+    const handleRoomState = (snapshot: any) => {
+      if (snapshot?.chatHistory && Array.isArray(snapshot.chatHistory)) {
+        setMessages((prev) => (prev.length === 0 ? snapshot.chatHistory : prev));
+      }
+    };
+
+    socket.on("chat:message", handleNewMessage);
+    socket.on("room:state", handleRoomState);
 
     return () => {
-      supabase.removeChannel(channel);
+      socket.off("chat:message", handleNewMessage);
+      socket.off("room:state", handleRoomState);
     };
-  }, [roomCode, player, supabase]);
+  }, [roomCode]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -114,21 +70,15 @@ const ChatPanel = ({ roomCode }: ChatPanelProps) => {
   const sendMessage = async () => {
     if (!input.trim() || !roomCode || !player) return;
 
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      sender: player.name || "Jogador",
-      text: input,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    const channel = supabase.channel(`chat:${roomCode}`);
-    await channel.send({
-      type: "broadcast",
-      event: "message",
-      payload: newMessage,
-    });
-
+    const socket = getGameSocket();
+    const textToSend = input.trim();
     setInput("");
+
+    socket.emit("chat:send", {
+      roomCode: roomCode.toUpperCase(),
+      sender: player.name || "Jogador",
+      text: textToSend,
+    });
   };
 
   return (

@@ -6,12 +6,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import ParticleBackground from "@/components/game/ParticleBackground";
 import { Gamepad2, LogIn, RefreshCw } from "lucide-react";
 import Image from "next/image";
+import { wakeUpGameServer, getGameSocket } from "@/lib/socket";
 
 export default function HomePage() {
   const router = useRouter();
   const [lastRoom, setLastRoom] = useState<{code: string, isHost: boolean} | null>(null);
 
   useEffect(() => {
+    wakeUpGameServer();
+    getGameSocket();
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem("player");
       if (saved) {

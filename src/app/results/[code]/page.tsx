@@ -8,6 +8,7 @@ import ConfettiEffect from "@/components/game/ConfettiEffect";
 import { Trophy, Medal, Award, RotateCcw, Home, Loader2 } from "lucide-react";
 import AvatarDisplay from "@/components/game/AvatarDisplay";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
+import { emitWithAck } from "@/lib/socket";
 
 function ResultsContent() {
   const router = useRouter();
@@ -17,6 +18,7 @@ function ResultsContent() {
   const [players, setPlayers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -24,13 +26,14 @@ function ResultsContent() {
       if (sessionData) {
         const parsed = JSON.parse(sessionData);
         setCurrentPlayerId(parsed.id);
+        setSessionId(parsed.sessionId || parsed.id);
       }
     }
   }, []);
 
   const { room, players: realtimePlayers, isLoading: isRealtimeLoading } = useRealtimeRoom(code);
 
-  const isHost = realtimePlayers.find(p => p.id === currentPlayerId)?.is_host || room?.host_id === currentPlayerId;
+  const isHost = realtimePlayers.find(p => p.id === currentPlayerId)?.is_host || room?.host_id === sessionId || room?.host_id === currentPlayerId;
 
   useEffect(() => {
     if (room?.status === 'waiting') {
@@ -39,12 +42,11 @@ function ResultsContent() {
   }, [room?.status, code, router]);
 
   const handleRestart = async () => {
-    if (!currentPlayerId) return;
+    if (!currentPlayerId && !sessionId) return;
     try {
-      await fetch(`/api/rooms/${code}/restart`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: currentPlayerId })
+      await emitWithAck("room:restart", {
+        roomCode: code,
+        sessionId: sessionId || currentPlayerId,
       });
     } catch (err) {
       console.error("Error restarting:", err);

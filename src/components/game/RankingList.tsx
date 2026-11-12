@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PlayerCard from "./PlayerCard";
 import { Player, RoundAnswer } from "@/types/database";
+import { getServerNow } from "@/lib/socket";
 
 interface RankingListProps {
   players: Player[];
@@ -15,10 +16,10 @@ interface RankingListProps {
 }
 
 const RankingList = ({ players, currentPlayerId, answers, maxScore, roundStatus, roundType }: RankingListProps) => {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(getServerNow());
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 2000);
+    const interval = setInterval(() => setNow(getServerNow()), 2000);
     return () => clearInterval(interval);
   }, []);
 

@@ -9,6 +9,9 @@ next.config.js
 dist
 dist-ssr
 *.local
+*.tsbuildinfo
+.env
+server/.env
 
 # Logs
 logs

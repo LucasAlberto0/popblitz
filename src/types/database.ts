@@ -15,6 +15,7 @@ export interface Room {
   max_score?: number
   difficulty?: string
   include_audio?: boolean
+  only_audio?: boolean
   include_surprise?: boolean
   include_custom?: boolean
   created_at: string
@@ -24,6 +25,7 @@ export interface Room {
 export interface Player {
   id: string
   room_id: string
+  session_id?: string
   name: string
   avatar: string
   score: number
@@ -33,6 +35,7 @@ export interface Player {
   player_order: number
   joined_at: string
   last_seen_at: string | null
+  socket_id?: string | null
 }
 
 export interface Round {
@@ -42,11 +45,14 @@ export interface Round {
   image_url: string
   audio_url?: string | null
   type?: string
+  question?: string | null
   answer: string
   answer_hints: string[]
   status: RoundStatus
   started_at: string | null
   ended_at: string | null
+  ends_at_ms?: number | null
+  interval_ends_at_ms?: number | null
   lucky_player_id?: string | null
 }
 
@@ -59,6 +65,10 @@ export interface RoundAnswer {
   time_ms: number
   points_earned: number
   answered_at: string
+  player?: {
+    name: string
+    avatar: string
+  }
 }
 
 export interface GameState {

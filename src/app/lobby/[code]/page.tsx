@@ -4,10 +4,11 @@ import { useState, useMemo, Suspense, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import ParticleBackground from "@/components/game/ParticleBackground";
-import { Copy, Check, Crown, Loader2, Play, RefreshCw } from "lucide-react";
+import { Copy, Check, Crown, Loader2, Play } from "lucide-react";
 import { useRealtimeRoom } from "@/hooks/useRealtimeRoom";
 import ChatPanel from "@/components/game/ChatPanel";
 import AvatarDisplay from "@/components/game/AvatarDisplay";
+import { emitWithAck, getGameSocket, getServerNow } from "@/lib/socket";
 
 function LobbyContent() {
   const router = useRouter();
@@ -50,12 +51,11 @@ function LobbyContent() {
   const [includeSurprise, setIncludeSurprise] = useState(false);
   const [includeCustom, setIncludeCustom] = useState(false);
   const [onlyAudio, setOnlyAudio] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
 
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(getServerNow());
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 2000);
+    const interval = setInterval(() => setNow(getServerNow()), 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -89,49 +89,43 @@ function LobbyContent() {
     }
   }, [room, isHost]);
 
-  // 2. Host: Push rule changes to DB with debounce
+  // 2. Host: Push rule changes to Game Server with debounce
   useEffect(() => {
     if (!isHost || !playerData || !room) return;
 
     const timeoutId = setTimeout(async () => {
       try {
-        await fetch(`/api/rooms/${code}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: playerData.sessionId,
-            maxScore,
-            difficulty,
-            includeAudio,
-            includeSurprise,
-            includeCustom,
-            onlyAudio,
-            timePerRound,
-            intervalTime
-          }),
+        await emitWithAck("room:update_rules", {
+          roomCode: code,
+          sessionId: playerData.sessionId,
+          maxScore,
+          difficulty,
+          includeAudio,
+          includeSurprise,
+          includeCustom,
+          onlyAudio,
+          timePerRound,
+          intervalTime,
         });
       } catch (err) {
         console.error("Failed to sync rules:", err);
       }
-    }, 500);
+    }, 300);
 
     return () => clearTimeout(timeoutId);
   }, [isHost, maxScore, difficulty, includeAudio, includeSurprise, includeCustom, onlyAudio, timePerRound, intervalTime, code, playerData]);
 
-  // 3. Heartbeat Logic (Web Worker to avoid background throttling)
+  // 3. Heartbeat Logic (Web Worker over WebSocket to avoid background throttling)
   useEffect(() => {
     if (!playerData?.id || !code) return;
 
-    const sendHeartbeat = async () => {
-      try {
-        await fetch(`/api/players/${playerData.id}/heartbeat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: playerData.sessionId }),
-        });
-      } catch (err) {
-        console.error("Heartbeat failed:", err);
-      }
+    const socket = getGameSocket();
+    const sendHeartbeat = () => {
+      socket.emit("player:heartbeat", {
+        roomCode: code,
+        playerId: playerData.id,
+        sessionId: playerData.sessionId,
+      });
     };
 
     const workerCode = `
@@ -153,9 +147,7 @@ function LobbyContent() {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        setIsSyncing(true);
         sendHeartbeat();
-        setTimeout(() => setIsSyncing(false), 800);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -167,60 +159,28 @@ function LobbyContent() {
     };
   }, [playerData?.id, playerData?.sessionId, code]);
 
-  // 4. Auto-kick Logic (Host only)
-  useEffect(() => {
-    if (!isHost || !playerData?.id || !code) return;
-
-    const checkKicks = async () => {
-      const now = Date.now();
-      for (const player of players) {
-        if (player.id !== playerData.id && player.last_seen_at) {
-          const lastSeen = new Date(player.last_seen_at).getTime();
-          const inactiveSecs = (now - lastSeen) / 1000;
-          
-          if (inactiveSecs > 65) { // Threshold for 12s heartbeats (5x margin + buffer)
-            console.log(`Lobby: Host kicking inactive player: ${player.name}`);
-            fetch(`/api/players/${player.id}/kick`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sessionId: playerData.sessionId }),
-            }).catch(() => {});
-          }
-        }
-      }
-    };
-
-    const kickInterval = setInterval(checkKicks, 30000);
-    return () => clearInterval(kickInterval);
-  }, [isHost, players, playerData?.id, playerData?.sessionId, code]);
-
   const handleStartGame = async () => {
     setIsStarting(true);
     try {
       if (!playerData) throw new Error("Dados do jogador não encontrados");
       
-      const res = await fetch(`/api/rooms/${code}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          sessionId: playerData.sessionId,
-          maxScore: maxScore,
-          difficulty: difficulty,
-          timePerRound: timePerRound,
-          intervalTime: intervalTime,
-          includeAudio: includeAudio,
-          includeSurprise: includeSurprise,
-          includeCustom: includeCustom,
-          onlyAudio: onlyAudio
-        }),
+      const data = await emitWithAck("room:start", { 
+        roomCode: code,
+        sessionId: playerData.sessionId,
+        maxScore: maxScore,
+        difficulty: difficulty,
+        timePerRound: timePerRound,
+        intervalTime: intervalTime,
+        includeAudio: includeAudio,
+        includeSurprise: includeSurprise,
+        includeCustom: includeCustom,
+        onlyAudio: onlyAudio
       });
       
-      const data = await res.json();
-      
-      if (data.success) {
+      if (data?.success) {
         router.push(`/game/${code}`);
       } else {
-        setError(data.error || "Erro ao iniciar jogo");
+        setError(data?.error || "Erro ao iniciar jogo");
       }
     } catch (err) {
       setError("Erro ao iniciar jogo");
@@ -258,28 +218,6 @@ function LobbyContent() {
   return (
     <div className="relative min-h-screen gradient-bg-animated px-4 py-8 flex flex-col items-center">
       <ParticleBackground />
-
-      <AnimatePresence>
-        {isSyncing && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-background/40 backdrop-blur-md"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="flex flex-col items-center gap-4 bg-black/20 p-8 rounded-2xl border border-primary/20 shadow-2xl transition-all"
-            >
-              <RefreshCw className="w-10 h-10 text-primary animate-spin" />
-              <span className="font-display text-primary tracking-widest uppercase text-sm">
-                Sincronizando...
-              </span>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <div className="relative z-10 max-w-5xl w-full">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
