@@ -494,6 +494,7 @@ function GameContent() {
 
     setAnswered(true);
     setFeedback(null);
+    inputRef.current?.focus({ preventScroll: true });
 
     // Calculate time offset for first round using synchronized server clock
     let startTimeRound = new Date(currentRound.started_at!).getTime();
@@ -527,25 +528,23 @@ function GameContent() {
         if (currentRound.type !== 'boolean') {
           setFeedback("wrong");
           setAnswered(false);
-          setTimeout(() => {
-            if (inputRef.current) {
-              inputRef.current.focus({ preventScroll: true });
-              inputRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
-            }
-          }, 50);
+          setAnswer("");
+          inputRef.current?.focus({ preventScroll: true });
+          requestAnimationFrame(() => {
+            inputRef.current?.focus({ preventScroll: true });
+          });
+        } else {
+          setAnswer("");
         }
-        setAnswer("");
       }
     } catch (err) {
       setFeedback("wrong");
       setAnswer("");
       setAnswered(false);
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus({ preventScroll: true });
-          inputRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
-        }
-      }, 50);
+      inputRef.current?.focus({ preventScroll: true });
+      requestAnimationFrame(() => {
+        inputRef.current?.focus({ preventScroll: true });
+      });
     }
   };
 
@@ -1132,19 +1131,25 @@ function GameContent() {
               </motion.button>
             </motion.div>
           ) : !showRoundResult && !isSurpriseRound && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitAnswer();
+              }}
               className={`flex gap-3 mt-1 lg:mb-0 lg:mt-4 flex-shrink-0 ${feedback === "wrong" ? "animate-[shake_0.3s_ease]" : ""}`}
             >
               <input
                 ref={inputRef}
+                type="text"
+                enterKeyHint="send"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={answer}
                 onChange={(e) => {
                   setAnswer(e.target.value);
                   if (feedback === "wrong") setFeedback(null);
                 }}
-                onKeyDown={(e) => e.key === "Enter" && submitAnswer()}
                 placeholder="Sua resposta..."
                 disabled={feedback === "correct" || showRoundResult || preGameCountdown !== null}
                 className={`flex-1 bg-input border rounded-xl px-4 py-3 font-body text-foreground placeholder:text-muted-foreground focus:outline-none transition-all scroll-mb-2 ${feedback === "correct"
@@ -1155,15 +1160,19 @@ function GameContent() {
                   } disabled:opacity-50 disabled:pointer-events-none`}
               />
               <motion.button
+                type="submit"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => submitAnswer()}
+                onPointerDown={(e) => {
+                  // Impede que o toque no botão remova o foco do input no celular
+                  e.preventDefault();
+                }}
                 disabled={answered || !answer.trim() || feedback === "correct" || preGameCountdown !== null}
                 className="btn-neon px-6 py-3 rounded-xl text-primary-foreground font-display text-xs tracking-widest disabled:opacity-40 disabled:pointer-events-none"
               >
                 Enviar
               </motion.button>
-            </motion.div>
+            </form>
           )}
 
           <AnimatePresence>
