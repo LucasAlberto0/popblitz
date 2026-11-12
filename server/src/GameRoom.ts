@@ -94,6 +94,7 @@ export class GameRoom {
     }
 
     this.players.push(hostPlayer)
+    this.broadcastSystemChat(`${hostPlayer.name} entrou na sala`, `join-${hostPlayer.id}-${Date.now()}`)
   }
 
   public clearTimers(): void {
@@ -126,9 +127,19 @@ export class GameRoom {
     if (existingSessionId) {
       const existingBySession = this.players.find((p) => p.session_id === existingSessionId)
       if (existingBySession && !existingBySession.socket_id) {
+        const lastSeenMs = existingBySession.last_seen_at
+          ? new Date(existingBySession.last_seen_at).getTime()
+          : Date.now()
+        const wasGoneLong = Date.now() - lastSeenMs > 15000
         existingBySession.last_seen_at = new Date().toISOString()
         if (playerName?.trim()) existingBySession.name = playerName.trim()
         if (playerAvatar) existingBySession.avatar = playerAvatar
+        if (wasGoneLong) {
+          this.broadcastSystemChat(
+            `${existingBySession.name} voltou para a sala`,
+            `rejoin-${existingBySession.id}-${Date.now()}`
+          )
+        }
         this.broadcastState()
         return { player: existingBySession }
       }
@@ -169,6 +180,7 @@ export class GameRoom {
     }
 
     this.players.push(newPlayer)
+    this.broadcastSystemChat(`${newPlayer.name} entrou na sala`, `join-${newPlayer.id}-${Date.now()}`)
     this.broadcastState()
     return { player: newPlayer }
   }
@@ -180,15 +192,60 @@ export class GameRoom {
     )
     if (!player) return null
 
-    const wasOffline = !player.socket_id
     player.socket_id = socketId
     player.last_seen_at = new Date().toISOString()
 
-    if (wasOffline) {
-      this.broadcastSystemChat(`${player.name} entrou na sala`, `join-${player.id}-${Date.now()}`)
-    }
     this.broadcastState()
     return player
+  }
+
+  public leaveView(sessionId?: string, playerId?: string, socketId?: string): void {
+    const player = this.players.find(
+      (p) =>
+        (socketId && p.socket_id === socketId) ||
+        (sessionId && p.session_id === sessionId) ||
+        (playerId && p.id === playerId)
+    )
+    if (!player) return
+
+    player.socket_id = null
+    player.last_seen_at = new Date().toISOString()
+    this.broadcastState()
+  }
+
+  public isRoomActiveForReturn(
+    sessionId?: string,
+    playerId?: string
+  ): {
+    active: boolean
+    status?: RoomData['status']
+    isHost?: boolean
+  } {
+    if (this.room.status === 'finished') {
+      return { active: false }
+    }
+
+    if (this.players.length < 2) {
+      return { active: false }
+    }
+
+    const requester = this.players.find(
+      (p) => (sessionId && p.session_id === sessionId) || (playerId && p.id === playerId)
+    )
+    if (!requester) {
+      return { active: false }
+    }
+
+    const connectedCount = this.players.filter((p) => p.socket_id !== null).length
+    if (connectedCount === 0) {
+      return { active: false }
+    }
+
+    return {
+      active: true,
+      status: this.room.status,
+      isHost: requester.is_host,
+    }
   }
 
   public handleSocketDisconnect(socketId: string): void {
@@ -927,6 +984,7 @@ export class GameRoom {
 
   public broadcastState(): void {
     this.io.to(this.room.code).emit('room:state', this.getSnapshot())
+    this.io.emit('room:activity_update', { roomCode: this.room.code })
   }
 }
 

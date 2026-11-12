@@ -292,6 +292,37 @@ async function main() {
       }
     })
 
+    // 13. Leave Room View (when navigating back to Home Page)
+    socket.on(
+      'room:leave_view',
+      (payload: { roomCode: string; sessionId?: string; playerId?: string }) => {
+        const code = payload?.roomCode?.trim()?.toUpperCase()
+        if (!code) return
+        socket.leave(code)
+        const gameRoom = roomManager.getRoom(code)
+        if (gameRoom) {
+          gameRoom.leaveView(payload.sessionId, payload.playerId, socket.id)
+        }
+      }
+    )
+
+    // 14. Check if Room is Active (at least 2 players and not closed/finished)
+    socket.on(
+      'room:check',
+      (
+        payload: { roomCode: string; sessionId?: string; playerId?: string },
+        ack?: (res: { active: boolean; status?: string; isHost?: boolean }) => void
+      ) => {
+        const code = payload?.roomCode?.trim()?.toUpperCase()
+        const gameRoom = code ? roomManager.getRoom(code) : undefined
+        if (!gameRoom) {
+          return ack?.({ active: false })
+        }
+        const status = gameRoom.isRoomActiveForReturn(payload.sessionId, payload.playerId)
+        ack?.(status)
+      }
+    )
+
     socket.on('disconnect', () => {
       roomManager.handleDisconnect(socket.id)
     })

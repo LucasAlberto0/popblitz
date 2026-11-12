@@ -78,6 +78,22 @@ export function useRealtimeRoom(roomCode: string) {
     return () => {
       socket.off("room:state", handleRoomState)
       socket.off("connect", subscribeToRoom)
+
+      let savedPlayer: any = null
+      if (typeof window !== "undefined") {
+        const raw = sessionStorage.getItem("player") || localStorage.getItem("player")
+        if (raw) {
+          try {
+            savedPlayer = JSON.parse(raw)
+          } catch {}
+        }
+      }
+
+      socket.emit("room:leave_view", {
+        roomCode: normalizedCode,
+        sessionId: savedPlayer?.sessionId,
+        playerId: savedPlayer?.id,
+      })
     }
   }, [roomCode])
 

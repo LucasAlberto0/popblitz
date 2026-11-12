@@ -81,11 +81,12 @@ export class RoomManager {
     for (const [code, room] of this.rooms.entries()) {
       room.pruneInactivePlayers()
 
-      // Remove room from RAM if empty for > 15 minutes or inactive for > 2 hours
+      // Remove room from RAM if all players were pruned or inactive for > 2 hours
       const idleMs = now - room.lastActivityAt
-      if ((room.players.length === 0 && idleMs > 15 * 60 * 1000) || idleMs > 2 * 60 * 60 * 1000) {
+      if (room.players.length === 0 || idleMs > 2 * 60 * 60 * 1000) {
         room.clearTimers()
         this.rooms.delete(code)
+        this.io.emit('room:activity_update', { roomCode: code })
       }
     }
   }

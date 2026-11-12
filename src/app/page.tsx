@@ -10,20 +10,68 @@ import { wakeUpGameServer, getGameSocket } from "@/lib/socket";
 
 export default function HomePage() {
   const router = useRouter();
-  const [lastRoom, setLastRoom] = useState<{code: string, isHost: boolean} | null>(null);
+  const [lastRoom, setLastRoom] = useState<{ code: string; isHost: boolean; status?: string } | null>(null);
 
   useEffect(() => {
     wakeUpGameServer();
-    getGameSocket();
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem("player");
-      if (saved) {
-        const data = JSON.parse(saved);
-        if (data.roomCode) {
-          setLastRoom({ code: data.roomCode, isHost: data.isHost });
-        }
+    const socket = getGameSocket();
+
+    if (typeof window === "undefined") return;
+
+    const getSavedPlayer = () => {
+      const raw = sessionStorage.getItem("player") || localStorage.getItem("player");
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
       }
-    }
+    };
+
+    const verifyRoom = () => {
+      const data = getSavedPlayer();
+      if (!data?.roomCode) {
+        setLastRoom(null);
+        return;
+      }
+
+      socket.emit(
+        "room:check",
+        {
+          roomCode: data.roomCode,
+          sessionId: data.sessionId,
+          playerId: data.id,
+        },
+        (res: { active?: boolean; status?: string; isHost?: boolean }) => {
+          if (res?.active) {
+            setLastRoom({
+              code: data.roomCode,
+              isHost: res.isHost ?? !!data.isHost,
+              status: res.status,
+            });
+          } else {
+            setLastRoom(null);
+          }
+        }
+      );
+    };
+
+    const handleActivityUpdate = (payload: { roomCode?: string }) => {
+      const data = getSavedPlayer();
+      if (data?.roomCode && payload?.roomCode?.toUpperCase() === data.roomCode.toUpperCase()) {
+        verifyRoom();
+      }
+    };
+
+    socket.on("connect", verifyRoom);
+    socket.on("room:activity_update", handleActivityUpdate);
+
+    verifyRoom();
+
+    return () => {
+      socket.off("connect", verifyRoom);
+      socket.off("room:activity_update", handleActivityUpdate);
+    };
   }, []);
 
   return (
@@ -101,9 +149,18 @@ export default function HomePage() {
               <motion.button
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => router.push(lastRoom.isHost ? `/lobby/${lastRoom.code}?host=true` : `/lobby/${lastRoom.code}`)}
+                onClick={() =>
+                  router.push(
+                    lastRoom.status === "playing"
+                      ? `/game/${lastRoom.code}`
+                      : lastRoom.isHost
+                        ? `/lobby/${lastRoom.code}?host=true`
+                        : `/lobby/${lastRoom.code}`
+                  )
+                }
                 className="w-full py-4 rounded-xl bg-neon-cyan/20 border-2 border-neon-cyan text-neon-cyan font-display text-sm tracking-widest flex items-center justify-center gap-2 mb-6"
               >
                 <RefreshCw size={20} className="animate-[spin_3s_linear_infinite]" />

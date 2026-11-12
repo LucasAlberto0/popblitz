@@ -2,8 +2,20 @@
 
 import { io, Socket } from "socket.io-client"
 
-export const GAME_SERVER_URL =
-  process.env.NEXT_PUBLIC_GAME_SERVER_URL || "http://localhost:4000"
+const PRODUCTION_SERVER_URL = "https://popblitz-game-server.onrender.com"
+
+export function getGameServerUrl(): string {
+  if (process.env.NEXT_PUBLIC_GAME_SERVER_URL) {
+    return process.env.NEXT_PUBLIC_GAME_SERVER_URL.replace(/\/$/, "")
+  }
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://localhost:4000"
+    }
+  }
+  return PRODUCTION_SERVER_URL
+}
 
 let socketInstance: Socket | null = null
 let clockOffsetMs = 0
@@ -53,7 +65,7 @@ async function calibrateClock(socket: Socket): Promise<void> {
 
 export function getGameSocket(): Socket {
   if (!socketInstance) {
-    socketInstance = io(GAME_SERVER_URL, {
+    socketInstance = io(getGameServerUrl(), {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -72,7 +84,7 @@ export function getGameSocket(): Socket {
 
 export function wakeUpGameServer(): void {
   if (typeof window === "undefined") return
-  fetch(`${GAME_SERVER_URL}/health`, { method: "GET", mode: "cors" })
+  fetch(`${getGameServerUrl()}/health`, { method: "GET", mode: "cors" })
     .then((r) => r.json())
     .then((data) => {
       if (data?.serverNow) {
