@@ -39,8 +39,7 @@ const RankingList = ({ players, currentPlayerId, answers, maxScore, roundStatus,
             const lastGuess = playerAnswers[playerAnswers.length - 1]?.answer;
             const isSpectator = player.status === 'ready';
             const isCurrent = player.id === currentPlayerId;
-            const lastSeen = player.last_seen_at ? new Date(player.last_seen_at).getTime() : 0;
-            const isDisconnected = player.last_seen_at ? (now - lastSeen > 40000) : false;
+            const isDisconnected = player.socket_id === null;
 
             // Special logic for boolean rounds: hide feedback until finished
             const hideFeedback = roundType === 'boolean' && roundStatus !== 'finished';

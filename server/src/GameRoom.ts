@@ -42,6 +42,7 @@ export class GameRoom {
   private io: Server
   private roundTimer: NodeJS.Timeout | null = null
   private intervalTimer: NodeJS.Timeout | null = null
+  private playerSockets: Map<string, Set<string>> = new Map()
 
   constructor(
     io: Server,
@@ -192,6 +193,13 @@ export class GameRoom {
     )
     if (!player) return null
 
+    let set = this.playerSockets.get(player.id)
+    if (!set) {
+      set = new Set()
+      this.playerSockets.set(player.id, set)
+    }
+    set.add(socketId)
+
     player.socket_id = socketId
     player.last_seen_at = new Date().toISOString()
 
@@ -202,13 +210,21 @@ export class GameRoom {
   public leaveView(sessionId?: string, playerId?: string, socketId?: string): void {
     const player = this.players.find(
       (p) =>
-        (socketId && p.socket_id === socketId) ||
         (sessionId && p.session_id === sessionId) ||
-        (playerId && p.id === playerId)
+        (playerId && p.id === playerId) ||
+        (socketId && this.playerSockets.get(p.id)?.has(socketId))
     )
     if (!player) return
 
-    player.socket_id = null
+    const set = this.playerSockets.get(player.id)
+    if (set && socketId) {
+      set.delete(socketId)
+    } else if (set) {
+      set.clear()
+    }
+
+    const remainingSockets = set ? Array.from(set) : []
+    player.socket_id = remainingSockets.length > 0 ? remainingSockets[0] : null
     player.last_seen_at = new Date().toISOString()
     this.broadcastState()
   }
@@ -249,18 +265,42 @@ export class GameRoom {
   }
 
   public handleSocketDisconnect(socketId: string): void {
-    const player = this.players.find((p) => p.socket_id === socketId)
-    if (!player) return
-
-    player.socket_id = null
-    player.last_seen_at = new Date().toISOString()
-    this.broadcastState()
+    let changed = false
+    for (const player of this.players) {
+      const set = this.playerSockets.get(player.id)
+      if (set?.has(socketId)) {
+        set.delete(socketId)
+        const remaining = Array.from(set)
+        player.socket_id = remaining.length > 0 ? remaining[0] : null
+        player.last_seen_at = new Date().toISOString()
+        changed = true
+      } else if (player.socket_id === socketId) {
+        player.socket_id = null
+        player.last_seen_at = new Date().toISOString()
+        changed = true
+      }
+    }
+    if (changed) {
+      this.broadcastState()
+    }
   }
 
-  public heartbeat(playerId: string, sessionId: string): boolean {
+  public heartbeat(playerId: string, sessionId: string, socketId?: string): boolean {
     const player = this.players.find((p) => p.id === playerId && p.session_id === sessionId)
     if (!player) return false
     player.last_seen_at = new Date().toISOString()
+    if (socketId) {
+      let set = this.playerSockets.get(player.id)
+      if (!set) {
+        set = new Set()
+        this.playerSockets.set(player.id, set)
+      }
+      set.add(socketId)
+      if (!player.socket_id) {
+        player.socket_id = socketId
+        this.broadcastState()
+      }
+    }
     this.touch()
     return true
   }

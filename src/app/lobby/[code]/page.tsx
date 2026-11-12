@@ -244,8 +244,7 @@ function LobbyContent() {
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                 <AnimatePresence>
                   {players.map((p: any, i: number) => {
-                    const lastSeen = p.last_seen_at ? new Date(p.last_seen_at).getTime() : 0;
-                    const isDisconnected = p.last_seen_at ? (now - lastSeen > 40000) : false;
+                    const isDisconnected = p.socket_id === null;
                     
                     return (
                       <motion.div

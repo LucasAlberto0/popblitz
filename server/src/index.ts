@@ -47,8 +47,8 @@ async function main() {
       origin: '*',
       methods: ['GET', 'POST'],
     },
-    pingInterval: 10000,
-    pingTimeout: 10000,
+    pingInterval: 25000,
+    pingTimeout: 60000,
   })
 
   const roomManager = new RoomManager(io)
@@ -288,7 +288,7 @@ async function main() {
     socket.on('player:heartbeat', (payload: { roomCode: string; playerId: string; sessionId: string }) => {
       const gameRoom = roomManager.getRoom(payload?.roomCode)
       if (gameRoom) {
-        gameRoom.heartbeat(payload.playerId, payload.sessionId)
+        gameRoom.heartbeat(payload.playerId, payload.sessionId, socket.id)
       }
     })
 
