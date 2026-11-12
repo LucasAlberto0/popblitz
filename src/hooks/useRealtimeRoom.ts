@@ -70,15 +70,7 @@ export function useRealtimeRoom(roomCode: string) {
       }
     }
 
-    socket.on("room:state", handleRoomState)
-    socket.on("connect", subscribeToRoom)
-
-    subscribeToRoom()
-
-    return () => {
-      socket.off("room:state", handleRoomState)
-      socket.off("connect", subscribeToRoom)
-
+    const notifyLeaveView = () => {
       let savedPlayer: any = null
       if (typeof window !== "undefined") {
         const raw = sessionStorage.getItem("player") || localStorage.getItem("player")
@@ -94,6 +86,25 @@ export function useRealtimeRoom(roomCode: string) {
         sessionId: savedPlayer?.sessionId,
         playerId: savedPlayer?.id,
       })
+    }
+
+    socket.on("room:state", handleRoomState)
+    socket.on("connect", subscribeToRoom)
+    if (typeof window !== "undefined") {
+      window.addEventListener("beforeunload", notifyLeaveView)
+      window.addEventListener("pagehide", notifyLeaveView)
+    }
+
+    subscribeToRoom()
+
+    return () => {
+      socket.off("room:state", handleRoomState)
+      socket.off("connect", subscribeToRoom)
+      if (typeof window !== "undefined") {
+        window.removeEventListener("beforeunload", notifyLeaveView)
+        window.removeEventListener("pagehide", notifyLeaveView)
+      }
+      notifyLeaveView()
     }
   }, [roomCode])
 

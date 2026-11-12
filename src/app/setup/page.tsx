@@ -100,7 +100,10 @@ function SetupContent() {
             roomCode: cleanCode,
             playerName: name.trim(),
             playerAvatar: avatar,
-            sessionId: null,
+            sessionId:
+              typeof window !== "undefined"
+                ? JSON.parse(localStorage.getItem("player") || "{}").sessionId || null
+                : null,
           },
           40000
         );

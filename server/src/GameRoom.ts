@@ -43,6 +43,7 @@ export class GameRoom {
   private roundTimer: NodeJS.Timeout | null = null
   private intervalTimer: NodeJS.Timeout | null = null
   private playerSockets: Map<string, Set<string>> = new Map()
+  private disconnectTimers: Map<string, NodeJS.Timeout> = new Map()
 
   constructor(
     io: Server,
@@ -107,6 +108,30 @@ export class GameRoom {
       clearTimeout(this.intervalTimer)
       this.intervalTimer = null
     }
+    for (const timer of this.disconnectTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.disconnectTimers.clear()
+  }
+
+  private clearDisconnectTimer(playerId: string): void {
+    const existing = this.disconnectTimers.get(playerId)
+    if (existing) {
+      clearTimeout(existing)
+      this.disconnectTimers.delete(playerId)
+    }
+  }
+
+  private scheduleDisconnectRemoval(playerId: string): void {
+    this.clearDisconnectTimer(playerId)
+    const timer = setTimeout(() => {
+      this.disconnectTimers.delete(playerId)
+      const player = this.players.find((p) => p.id === playerId)
+      if (player && !player.socket_id) {
+        this.pruneInactivePlayers()
+      }
+    }, 30000)
+    this.disconnectTimers.set(playerId, timer)
   }
 
   public touch(): void {
@@ -124,26 +149,25 @@ export class GameRoom {
       return { error: 'A partida já foi encerrada' }
     }
 
-    // Reconnect ONLY if sessionId matches an existing player that is NOT currently connected in another live tab
-    if (existingSessionId) {
-      const existingBySession = this.players.find((p) => p.session_id === existingSessionId)
-      if (existingBySession && !existingBySession.socket_id) {
-        const lastSeenMs = existingBySession.last_seen_at
-          ? new Date(existingBySession.last_seen_at).getTime()
-          : Date.now()
-        const wasGoneLong = Date.now() - lastSeenMs > 15000
-        existingBySession.last_seen_at = new Date().toISOString()
-        if (playerName?.trim()) existingBySession.name = playerName.trim()
-        if (playerAvatar) existingBySession.avatar = playerAvatar
-        if (wasGoneLong) {
-          this.broadcastSystemChat(
-            `${existingBySession.name} voltou para a sala`,
-            `rejoin-${existingBySession.id}-${Date.now()}`
-          )
-        }
-        this.broadcastState()
-        return { player: existingBySession }
+    // Reconnect if there is a currently DISCONNECTED player (< 30s) with the same sessionId or same name
+    const trimmedName = playerName.trim()
+    const disconnectedMatch = this.players.find(
+      (p) =>
+        !p.socket_id &&
+        ((existingSessionId &&
+          p.session_id === existingSessionId &&
+          p.name.toLowerCase() === trimmedName.toLowerCase()) ||
+          p.name.toLowerCase() === trimmedName.toLowerCase())
+    )
+    if (disconnectedMatch) {
+      this.clearDisconnectTimer(disconnectedMatch.id)
+      disconnectedMatch.last_seen_at = new Date().toISOString()
+      if (playerAvatar) disconnectedMatch.avatar = playerAvatar
+      if (this.room.status === 'playing') {
+        disconnectedMatch.status = 'playing'
       }
+      this.broadcastState()
+      return { player: disconnectedMatch }
     }
 
     if (this.players.length >= this.room.max_players) {
@@ -193,6 +217,8 @@ export class GameRoom {
     )
     if (!player) return null
 
+    this.clearDisconnectTimer(player.id)
+
     let set = this.playerSockets.get(player.id)
     if (!set) {
       set = new Set()
@@ -226,6 +252,9 @@ export class GameRoom {
     const remainingSockets = set ? Array.from(set) : []
     player.socket_id = remainingSockets.length > 0 ? remainingSockets[0] : null
     player.last_seen_at = new Date().toISOString()
+    if (!player.socket_id) {
+      this.scheduleDisconnectRemoval(player.id)
+    }
     this.broadcastState()
   }
 
@@ -273,10 +302,14 @@ export class GameRoom {
         const remaining = Array.from(set)
         player.socket_id = remaining.length > 0 ? remaining[0] : null
         player.last_seen_at = new Date().toISOString()
+        if (!player.socket_id) {
+          this.scheduleDisconnectRemoval(player.id)
+        }
         changed = true
       } else if (player.socket_id === socketId) {
         player.socket_id = null
         player.last_seen_at = new Date().toISOString()
+        this.scheduleDisconnectRemoval(player.id)
         changed = true
       }
     }
@@ -290,6 +323,7 @@ export class GameRoom {
     if (!player) return false
     player.last_seen_at = new Date().toISOString()
     if (socketId) {
+      this.clearDisconnectTimer(player.id)
       let set = this.playerSockets.get(player.id)
       if (!set) {
         set = new Set()
@@ -311,9 +345,9 @@ export class GameRoom {
     const toRemove: PlayerData[] = []
 
     for (const p of this.players) {
-      // Only remove if socket is disconnected AND last_seen_at > 65s
+      // Remove if socket is disconnected AND last_seen_at >= 30s
       const lastSeenMs = p.last_seen_at ? new Date(p.last_seen_at).getTime() : now
-      if (!p.socket_id && now - lastSeenMs > 65000) {
+      if (!p.socket_id && now - lastSeenMs >= 29500) {
         toRemove.push(p)
       }
     }
@@ -321,6 +355,7 @@ export class GameRoom {
     if (toRemove.length === 0) return
 
     for (const removed of toRemove) {
+      this.clearDisconnectTimer(removed.id)
       this.players = this.players.filter((p) => p.id !== removed.id)
       this.broadcastSystemChat(`${removed.name} saiu da sala`, `leave-${removed.id}-${Date.now()}`)
     }
